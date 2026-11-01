@@ -78,7 +78,9 @@ object Recordings {
     }
 
     // "통화 녹음 홍길동_241105_143012.m4a", "Call recording 01012345678_241105_143012.m4a"
-    private val NAME_RE = Regex("""^(?:통화\s*녹음|call\s*recording|call|녹음)?\s*(.*?)_(\d{6})_(\d{6})(?:_\d+)?\.[A-Za-z0-9]+$""", RegexOption.IGNORE_CASE)
+    private val NAME_RE = Regex("""^(?:(?:통화\s*녹음|통화|call\s*recording|call|녹음)[\s_\-]+)?(.*?)_(\d{6})_(\d{6})(?:_\d+)?\.[A-Za-z0-9]+$""", RegexOption.IGNORE_CASE)
+
+    val PREFIX_RE = Regex("""^(통화\s*녹음|통화|call\s*recording|녹음)[\s_\-]+""", RegexOption.IGNORE_CASE)
 
     private fun parseTime(file: String): Long? {
         val m = NAME_RE.find(file) ?: return null
@@ -91,7 +93,7 @@ object Recordings {
     fun parsePerson(file: String): String {
         val m = NAME_RE.find(file)
         val raw = (m?.groupValues?.get(1) ?: file.substringBeforeLast('.'))
-            .replace(Regex("""^(통화\s*녹음|call\s*recording)\s*""", RegexOption.IGNORE_CASE), "").trim()
+            .replace(PREFIX_RE, "").trim()
         return raw.ifEmpty { "알 수 없음" }
     }
 

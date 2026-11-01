@@ -189,7 +189,16 @@ class NativeBridge(private val act: MainActivity) {
                 if (key.isEmpty()) { done(id, -3, "설정에서 Gemini API 키를 먼저 넣어 주세요."); return@execute }
                 val model = Gemini.model(ctx, key)
                 val resp = Gemini.generate(key, model, JSONObject(body))
-                done(id, 200, Gemini.textOf(resp))
+                val out = JSONObject().put("text", Gemini.textOf(resp))
+                val src = JSONArray()
+                val chunks = resp.optJSONArray("candidates")?.optJSONObject(0)
+                    ?.optJSONObject("groundingMetadata")?.optJSONArray("groundingChunks")
+                if (chunks != null) for (i in 0 until chunks.length()) {
+                    val w = chunks.optJSONObject(i)?.optJSONObject("web") ?: continue
+                    src.put(JSONObject().put("title", w.optString("title")).put("uri", w.optString("uri")))
+                }
+                out.put("sources", src)
+                done(id, 200, out.toString())
             } catch (e: AiException) { done(id, -3, e.message ?: "") } catch (e: IOException) { done(id, -1, "") } catch (e: Exception) { done(id, -3, e.message ?: "") }
         }
     }

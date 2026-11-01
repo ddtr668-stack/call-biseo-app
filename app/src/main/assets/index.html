@@ -262,6 +262,7 @@ function reloadCalls(silent){
   try { S.calls = JSON.parse(N.calls() || '[]'); } catch(e){ S.calls = []; }
   S.calls.sort((a,b) => (b.ts||0) - (a.ts||0));
   S.byId = {}; S.calls.forEach(c => S.byId[c.id] = c);
+  S.calls.forEach(c => { const fixed = String(c.contact||'').replace(/^(통화\s*녹음|통화|녹음)[\s_-]+/, ''); if (fixed && fixed !== c.contact){ const old = c.contact; c.contact = fixed; N.patchCall(c.id, JSON.stringify({contact: fixed})); if (S.data.contacts[old] && !S.data.contacts[fixed]){ S.data.contacts[fixed] = S.data.contacts[old]; delete S.data.contacts[old]; saveData(); } } });
   if (!silent) render();
 }
 let saveT = 0;
@@ -655,24 +656,27 @@ function viewTodo(){
 }
 
 // ---------------------------------------------------------------- assistant chat
-const SUGG = ['오늘 통화한 내용 정리해줘', '이번 주에 내가 해야 할 일 알려줘', '최근에 견적 요청한 거래처는 어디야?', '최근 한 달 클레임이나 불만 있었던 통화 찾아줘'];
+const SUGG = ['오늘 통화한 내용 정리해줘', '이번 주에 내가 해야 할 일 알려줘', '내일 청주 날씨 어때?', '견적서 보냈다고 거래처에 보낼 문자 써줘'];
 function viewChat(){
   const log = S.data.chat || [];
   let h = `<div class="chatwrap"><div class="top" style="padding-bottom:6px"><div class="row"><h1>비서</h1>${log.length?`<button class="btn ghost small" data-act="chatClear">새 대화</button>`:''}</div></div><div class="chatlog" id="chatlog">`;
   if (!log.length){
-    h += `<div class="intro">지난 통화 내용을 물어보세요. 요약된 통화 ${S.calls.filter(c=>c.status==='done').length}개에서 찾아서 답해요.</div><div class="sugg">` +
+    h += `<div class="intro">무엇이든 물어보세요. 지난 통화(요약 ${S.calls.filter(c=>c.status==='done').length}개)는 기록에서 찾아 답하고, 날씨·뉴스·문자 초안 같은 건 구글 검색까지 써서 답해요.</div><div class="sugg">` +
       SUGG.map(s => `<button data-act="ask" data-q="${esc(s)}">${esc(s)}</button>`).join('') + `</div>`;
   }
   for (const m of log){
     h += `<div class="msg ${m.role}${m.err?' err':''}">${esc(m.text)}`;
-    if (m.refs && m.refs.length){
-      h += `<div class="refs">` + m.refs.filter(id => S.byId[id]).map(id => { const c = S.byId[id];
-        return `<button class="ref" data-act="open" data-id="${esc(id)}">${esc(c.contact)} ${shortWhen(c.ts)}</button>`; }).join('') + `</div>`;
+    const refs = (m.refs||[]).filter(id => S.byId[id]);
+    const src = (m.sources||[]).slice(0, 4);
+    if (refs.length || src.length){
+      h += `<div class="refs">` + refs.map(id => { const c = S.byId[id];
+        return `<button class="ref" data-act="open" data-id="${esc(id)}">${esc(c.contact)} ${shortWhen(c.ts)}</button>`; }).join('') +
+        src.map(x => `<button class="ref" style="color:var(--muted)" data-act="url" data-u="${esc(x.uri)}">${esc(x.title || '출처')}</button>`).join('') + `</div>`;
     }
     h += `</div>`;
   }
-  if (S.chatBusy) h += `<div class="msg model"><span class="spin"></span> 통화 기록을 찾아보는 중…</div>`;
-  h += `</div><div class="composer"><textarea id="chatin" rows="1" placeholder="예: 김사장님이 단가 얼마라고 했지?">${esc(S.chatDraft||'')}</textarea>
+  if (S.chatBusy) h += `<div class="msg model"><span class="spin"></span> 찾아보는 중…</div>`;
+  h += `</div><div class="composer"><textarea id="chatin" rows="1" placeholder="통화 내용, 날씨, 문자 초안… 무엇이든">${esc(S.chatDraft||'')}</textarea>
     <button data-act="send" aria-label="보내기">${I.send}</button></div></div>`;
   return h;
 }
@@ -685,18 +689,20 @@ function callLine(c){
   const acts = (c.actions||[]).map(a => `${a.done?'(완료)':''}${a.owner}:${a.title}${a.date?'@'+a.date+(a.time?' '+a.time:''):''}`).join('; ');
   return `[${c.id}] ${when} | ${who} | ${c.category||''} | ${c.title||''} | 요약: ${(c.summary||[]).join(' ')}${acts?' | 할일: '+acts:''}${c.memo?' | 메모: '+c.memo:''}`;
 }
-function buildContext(question){
+function buildContext(question, contact){
   const lines = []; let size = 0;
   for (const c of S.calls){ const l = callLine(c); if (size + l.length > 180000) break; lines.push(l); size += l.length; }
   // full transcripts of the calls that look most relevant
-  const words = question.toLowerCase().split(/[\s,.?!]+/).filter(w => w.length >= 2).map(w => w.replace(/(은|는|이|가|을|를|에|에게|한테|랑|과|와|의|도|님|씨|이랑)$/,'')).filter(w => w.length >= 1);
-  const scored = S.calls.filter(c => c.status === 'done').map(c => {
+  const words = question.toLowerCase().split(/[\s,.?!]+/).filter(w => w.length >= 2).map(w => w.replace(/(은|는|이|가|을|를|에|에게|한테|랑|과|와|의|도|님|씨|이랑)$/,'')).filter(w => w.length >= 2);
+  const done = S.calls.filter(c => c.status === 'done');
+  let picked = contact ? done.filter(c => c.contact === contact).slice(0, 12) : [];
+  const scored = done.map(c => {
     const t = searchText(c); let s = 0;
-    for (const w of words){ if (w.length < 2) continue; if ((c.contact||'').toLowerCase().includes(w)) s += 5; if (t.includes(w)) s += 1; }
+    for (const w of words){ if ((c.contact||'').toLowerCase().includes(w) || (c.company||'').toLowerCase().includes(w)) s += 5; if (t.includes(w)) s += 1; }
     return [s, c];
   }).filter(x => x[0] > 0).sort((a,b) => b[0] - a[0] || b[1].ts - a[1].ts);
-  const picked = scored.slice(0, 8).map(x => x[1]);
-  if (/오늘|어제|방금|최근|아까/.test(question)) S.calls.filter(c => c.status === 'done').slice(0, 4).forEach(c => { if (!picked.includes(c)) picked.push(c); });
+  scored.slice(0, 8).forEach(x => { if (!picked.includes(x[1])) picked.push(x[1]); });
+  if (/오늘|어제|방금|최근|아까/.test(question)) done.slice(0, 4).forEach(c => { if (!picked.includes(c)) picked.push(c); });
   let tx = ''; const LIM = 90000;
   for (const c of picked){
     const t = (c.transcript||[]).map(x => `${x.s === '나' ? '나' : '상대'}: ${x.t}`).join('\n');
@@ -704,37 +710,48 @@ function buildContext(question){
     tx += `\n\n### [${c.id}] ${c.contact} ${dayLabel(c.ts)} ${timeLabel(c.ts)} 대화 원문\n${t}`;
   }
   const meta = Object.entries(S.data.contacts).filter(([k,v]) => v.memo).map(([k,v]) => `${k}: ${v.memo}`).join('\n');
-  return `## 통화 목록 (최근순, 총 ${S.calls.length}건)\n${lines.join('\n')}` + (meta ? `\n\n## 거래처 메모\n${meta}` : '') + (tx ? `\n\n## 관련 통화 원문${tx}` : '');
+  return `## 통화 목록 (최근순, 총 ${S.calls.length}건)\n${lines.join('\n') || '(아직 없음)'}` + (meta ? `\n\n## 거래처 메모\n${meta}` : '') + (tx ? `\n\n## 관련 통화 원문${tx}` : '');
 }
-async function ask(q){
+const ID_RE = /\[((?:ms|f)_[A-Za-z0-9]+)\]/g;
+function cleanAnswer(t){
+  const refs = []; let m;
+  while ((m = ID_RE.exec(t))) if (!refs.includes(m[1])) refs.push(m[1]);
+  t = t.replace(/\s*\[((?:ms|f)_[A-Za-z0-9]+)\](\s*,\s*\[((?:ms|f)_[A-Za-z0-9]+)\])*/g, '')
+       .replace(/\*\*(.+?)\*\*/g, '$1').replace(/^#{1,6}\s*/gm, '').replace(/^\s*\*\s+/gm, '- ').trim();
+  return {text: t, refs};
+}
+async function ask(q, contact){
   q = q.trim(); if (!q || S.chatBusy) return;
   if (!S.set.apiKey){ toast('설정에서 Gemini API 키를 먼저 넣어 주세요.'); return; }
   S.data.chat = (S.data.chat || []).concat([{role:'user', text:q}]).slice(-40);
   S.chatDraft = ''; S.chatBusy = true; saveData(); render();
   const now = new Date();
-  const sys = `너는 영업 담당자(사용자)의 통화 비서야. 아래 '통화 기록'만 근거로 한국어로 짧고 정확하게 답해.
+  const sys = `너는 영업 담당자(사용자)의 개인 비서야. 무엇을 물어봐도 한국어로 짧고 실용적으로 도와줘.
 - 오늘은 ${ymd(now)} (${WD[now.getDay()]}) ${pad(now.getHours())}:${pad(now.getMinutes())}.
 - 사용자 정보: ${S.set.myInfo || '영업 담당자'}
-- 금액·수량·날짜는 기록에 있는 그대로. 기록에 없으면 "통화 기록에서 찾지 못했어요"라고 말하고 추측하지 마.
-- 여러 건이면 거래처별로 줄을 나눠서. 마크다운 기호(#, **)는 쓰지 말고 필요하면 '-'로 목록.
-- refs에는 답의 근거가 된 통화 id(대괄호 안의 값)를 넣어.
+- 지난 통화·거래처·할 일·약속에 관한 질문은 아래 '통화 기록'을 근거로 답해. 금액·수량·날짜는 기록 그대로 쓰고, 기록에 없으면 "통화 기록에서 찾지 못했어요"라고 말해. 추측하지 마.
+- 통화 기록을 근거로 쓴 줄 끝에는 그 통화 id를 [ms_123]처럼 대괄호로 붙여.
+- 날씨, 뉴스, 시세, 길·장소, 일반 지식, 계산, 문자·메일 초안처럼 통화 기록과 상관없는 질문은 기록을 찾지 말고 바로 답해. 최신 정보가 필요하면 구글 검색을 써.
+- 문자·메일 초안을 써 달라면 바로 보낼 수 있는 완성된 글로.
+- 마크다운 기호(#, **)는 쓰지 말고, 목록은 '-'로.
 
 # 통화 기록
-${buildContext(q)}`;
+${buildContext(q, contact)}`;
   const hist = S.data.chat.slice(-9, -1).filter(m => !m.err).map(m => ({role: m.role === 'user' ? 'user' : 'model', parts:[{text: m.text}]}));
   const body = {
     systemInstruction: {parts:[{text: sys}]},
     contents: hist.concat([{role:'user', parts:[{text:q}]}]),
-    generationConfig: {temperature: 0.3, responseMimeType: 'application/json',
-      responseSchema: {type:'OBJECT', properties:{answer:{type:'STRING'}, refs:{type:'ARRAY', items:{type:'STRING'}}}, required:['answer']}}
+    tools: [{google_search: {}}],
+    generationConfig: {temperature: 0.4}
   };
   let r = await nreq('ai', JSON.stringify(body));
-  if (r.status === -3 && /\(400\)/.test(r.body)){ delete body.generationConfig.responseSchema; r = await nreq('ai', JSON.stringify(body)); }
+  if (r.status === -3 && /\(400\)|\(403\)/.test(r.body)){ delete body.tools; r = await nreq('ai', JSON.stringify(body)); }
   S.chatBusy = false;
   let msg;
   if (r.status === 200){
-    let o = null; try { o = JSON.parse(r.body); } catch(e){ const m = r.body.match(/\{[\s\S]*\}/); if (m) try { o = JSON.parse(m[0]); } catch(x){} }
-    msg = o && o.answer ? {role:'model', text:o.answer, refs:(o.refs||[]).slice(0,8)} : {role:'model', text:r.body || '답을 받지 못했어요.'};
+    let o = {}; try { o = JSON.parse(r.body); } catch(e){ o = {text: r.body}; }
+    const c = cleanAnswer(o.text || '');
+    msg = {role:'model', text: c.text || '답을 받지 못했어요.', refs: c.refs.slice(0, 8), sources: (o.sources||[]).filter(x => x.uri)};
   } else msg = {role:'model', err:true, text: r.status === -1 ? '인터넷 연결을 확인하고 다시 물어봐 주세요.' : (r.body || '답을 받지 못했어요.')};
   S.data.chat.push(msg); saveData();
   if (S.tab === 'chat') render();
@@ -966,7 +983,7 @@ document.addEventListener('click', e => {
     case 'chatClear': S.data.chat = []; saveData(); render(); break;
     case 'brief': {
       const name = d.name; S.page = null; S.tab = 'chat';
-      ask(`${name} 거래처와 지금까지 통화한 내용을 다음 통화 전에 알아야 할 것 위주로 브리핑해줘. 진행 중인 건, 약속한 것, 남은 할 일, 조건(단가·수량·납기)을 정리해서.`); break;
+      ask(`${name} 거래처와 지금까지 통화한 내용을 다음 통화 전에 알아야 할 것 위주로 브리핑해줘. 진행 중인 건, 약속한 것, 남은 할 일, 조건(단가·수량·납기)을 정리해서.`, name); break;
     }
     case 'saveKey': { const v = $('#apikey').value.trim(); N.setSetting('apiKey', v); S.set.apiKey = v; toast(v ? 'API 키를 저장했어요' : 'API 키를 지웠어요'); if (v) loadModels(false); else render(); break; }
     case 'loadModels': loadModels(false); break;

@@ -20,7 +20,7 @@
     {id:'ms_4', uri:'content://m/4', file:'x', contact:'최영수 부장', ts: now - 3*D, dur: 640, status:'error', error:'AI 사용량 한도에 걸렸어요. 잠시 뒤 자동으로 다시 시도해요.'},
     {id:'ms_5', uri:'content://m/5', file:'x', contact:'김정훈 소장', ts: now - 6*D, dur: 188, status:'done', title:'10월 납품분 세금계산서 발행 확인', category:'수금', company:'대성건설 평택현장',
      summary:['10월 납품분 세금계산서를 이번 주 금요일까지 발행해 달라고 요청함.','결제는 다음 달 10일 현금 결제 예정.'], actions:[{id:'c1', type:'todo', title:'10월분 세금계산서 발행', owner:'나', date:t(-4), time:'', note:'', done:true}], keywords:['세금계산서'], transcript:[], star:true},
-    {id:'ms_6', uri:'content://m/6', file:'x', contact:'이정아 과장', ts: now - 8*D, dur: 75, status:'new'},
+    {id:'ms_6', uri:'content://m/6', file:'x', contact:'통화 이정아 과장', ts: now - 8*D, dur: 75, status:'new'},
   ];
   let settings = {apiKey:'', model:'', auto:true, wifiOnly:false, popup:true, popupPos:'bottom', fontSize:'m', recPath:'Recordings/Call/,Call/', myInfo:'', calId:'', remindMin:'30', taskAccount:'', taskList:'', taskListName:''};
   let data = '';
@@ -37,7 +37,8 @@
     workState: () => JSON.stringify({current:'ms_2', block: settings.apiKey ? '' : 'nokey', canRead:true}),
     pickAudio(){}, settings: () => JSON.stringify(settings), setSetting: (k, v) => { settings[k] = v; },
     aiModels: id => later(id, 200, JSON.stringify(['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash-lite'])),
-    ai: (id, body) => later(id, 200, JSON.stringify({answer:'이번 주에 하실 일은 2가지예요.\n- 대성건설 수정 견적서 메일 발송 (내일까지, 톤당 96만 원 기준)\n- 한빛철강 H형강 출고 일정 확인 후 회신 (어제까지였어요)', refs:['ms_1','ms_3']}), 900),
+    ai: (id, body) => { const q = JSON.parse(body).contents.slice(-1)[0].parts[0].text; const w = q.includes('날씨');
+      later(id, 200, JSON.stringify({text: w ? '내일 청주는 맑고 낮 최고 17도, 아침 최저 4도예요. 일교차가 크니 겉옷 챙기세요.' : '이번 주에 하실 일은 2가지예요.\n- **대성건설 수정 견적서** 메일 발송 (내일까지) [ms_1]\n- 한빛철강 H형강 출고 일정 확인 후 회신 [ms_3]', sources: w ? [{title:'weather.go.kr', uri:'https://www.weather.go.kr'}] : []}), 900); },
     perms: () => JSON.stringify({audio:true, contacts:false, calendar:true, notif:true, battery:false, overlay:true}),
     askPerm(){}, openAppSettings(){},
     calendars: () => JSON.stringify([{id:3, name:'ddtr668@gmail.com', account:'ddtr668@gmail.com'},{id:5, name:'업무', account:'ddtr668@gmail.com'}]),
