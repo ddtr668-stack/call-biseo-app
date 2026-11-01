@@ -7,7 +7,11 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
-class AiException(val code: Int, message: String, val retry: Boolean = false) : Exception(message)
+class AiException(
+    val code: Int, message: String, val retry: Boolean = false,
+    /** 하루 무료 한도를 다 쓴 경우 */ val daily: Boolean = false,
+    /** 서버가 알려준 대기 시간(초), 모르면 0 */ val waitSec: Int = 0
+) : Exception(message)
 
 /** Google Gemini API over plain HTTPS (generateContent + Files API). */
 object Gemini {
@@ -44,16 +48,51 @@ object Gemini {
     }
 
     fun errorOf(r: Res): AiException {
-        val msg = try { JSONObject(r.body).optJSONObject("error")?.optString("message") ?: "" } catch (e: Exception) { "" }
+        var msg = ""
+        var quotaId = ""
+        var quotaValue = ""
+        var waitSec = 0
+        try {
+            val err = JSONObject(r.body).optJSONObject("error")
+            msg = err?.optString("message") ?: ""
+            val det = err?.optJSONArray("details")
+            if (det != null) for (i in 0 until det.length()) {
+                val d = det.optJSONObject(i) ?: continue
+                val v = d.optJSONArray("violations")?.optJSONObject(0)
+                if (v != null && quotaId.isEmpty()) { quotaId = v.optString("quotaId"); quotaValue = v.optString("quotaValue") }
+                val delay = d.optString("retryDelay")
+                if (delay.endsWith("s")) waitSec = delay.removeSuffix("s").toDoubleOrNull()?.toInt() ?: 0
+            }
+        } catch (e: Exception) { }
+        if (r.code == 429) {
+            val free = quotaId.contains("FreeTier", true) || msg.contains("free", true)
+            val daily = quotaId.contains("PerDay", true)
+            val tokens = quotaId.contains("Token", true)
+            val kind = if (free) "무료 " else ""
+            val text = when {
+                daily -> "오늘 쓸 수 있는 ${kind}AI 사용량${if (quotaValue.isNotEmpty()) "(하루 ${quotaValue}번)" else ""}을 다 썼어요. 매일 오후 5시쯤 다시 채워져요. 결제 정보를 등록하면 한도가 크게 늘어나요."
+                tokens -> "1분 동안 AI에 보낼 수 있는 ${kind}양을 넘었어요. 1분쯤 뒤에 다시 해 주세요."
+                else -> "1분 동안 쓸 수 있는 ${kind}AI 횟수${if (quotaValue.isNotEmpty()) "(분당 ${quotaValue}번)" else ""}를 넘었어요. 잠깐 뒤에 다시 해 주세요."
+            }
+            return AiException(429, text, true, daily, waitSec)
+        }
         val friendly = when {
             r.code == 400 && msg.contains("API key", true) -> "API 키가 올바르지 않아요. 설정에서 다시 확인해 주세요."
             r.code == 403 -> "API 키에 권한이 없어요 ($msg)"
             r.code == 404 -> "AI 모델을 찾을 수 없어요. 설정에서 모델을 다시 골라 주세요."
-            r.code == 429 -> "AI 사용량 한도에 걸렸어요. 잠시 뒤 자동으로 다시 시도해요."
             r.code >= 500 -> "AI 서버가 바빠요. 잠시 뒤 다시 시도해요."
             else -> "AI 오류 (${r.code}) $msg".trim()
         }
-        return AiException(r.code, friendly, r.code == 429 || r.code >= 500)
+        return AiException(r.code, friendly, r.code >= 500)
+    }
+
+    /** 무료 한도가 다시 채워지는 때: 미국 태평양 시간 자정 */
+    fun nextReset(): Long {
+        val c = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("America/Los_Angeles"))
+        c.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        c.set(java.util.Calendar.HOUR_OF_DAY, 0); c.set(java.util.Calendar.MINUTE, 5)
+        c.set(java.util.Calendar.SECOND, 0); c.set(java.util.Calendar.MILLISECOND, 0)
+        return c.timeInMillis
     }
 
     /** Model names that can generateContent, newest first. */
@@ -116,7 +155,15 @@ object Gemini {
     }
 
     fun generate(key: String, model: String, body: JSONObject): JSONObject {
-        val r = http("POST", "$BASE/v1beta/models/$model:generateContent", key, body.toString().toByteArray(Charsets.UTF_8))
+        val bytes = body.toString().toByteArray(Charsets.UTF_8)
+        var r = http("POST", "$BASE/v1beta/models/$model:generateContent", key, bytes)
+        if (r.code == 429) {
+            val e = errorOf(r)
+            if (!e.daily && e.waitSec in 1..45) {
+                Thread.sleep(e.waitSec * 1000L + 1500)
+                r = http("POST", "$BASE/v1beta/models/$model:generateContent", key, bytes)
+            }
+        }
         if (r.code != 200) throw errorOf(r)
         return JSONObject(r.body)
     }

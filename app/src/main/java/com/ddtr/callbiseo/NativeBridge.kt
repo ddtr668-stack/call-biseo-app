@@ -87,6 +87,7 @@ class NativeBridge(private val act: MainActivity) {
             "nokey" -> toast("설정에서 Gemini API 키를 먼저 넣어 주세요.")
             "offline" -> toast("인터넷이 연결되면 요약할게요.")
             "wifi" -> toast("와이파이에 연결되면 요약할게요.")
+            "daily" -> toast("오늘 AI 사용량을 다 썼어요. 오후 5시쯤 한도가 채워지면 이어서 요약할게요.")
         }
         Processor.kick(ctx)
     }

@@ -19,6 +19,8 @@ import java.util.concurrent.Future
 /** Finds new recordings and turns each one into transcript + summary + actions with Gemini, one at a time. */
 object Processor {
     private val exec = Executors.newSingleThreadExecutor()
+    /** 하루 한도에 걸리면 그때까지는 대기열을 돌리지 않는다 */
+    @Volatile var dailyLimitUntil = 0L
     @Volatile var current: String? = null
         private set
 
@@ -68,6 +70,7 @@ object Processor {
 
     fun canWork(ctx: Context): String? {
         if (Prefs.apiKey(ctx).isEmpty()) return "nokey"
+        if (System.currentTimeMillis() < dailyLimitUntil) return "daily"
         val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return null
         val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return "offline"
         if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return "offline"
@@ -110,7 +113,12 @@ object Processor {
             saveResult(ctx, id, result, model)
             notifyDone(ctx, id)
         } catch (e: AiException) {
-            fail(ctx, id, call, e.message ?: "오류", e.retry)
+            if (e.daily) {
+                // 하루 한도: 다시 채워질 때까지 기다렸다가 자동으로 이어서 요약 (시도 횟수는 세지 않음)
+                Store.patch(ctx, id, JSONObject().put("status", "error").put("error", e.message ?: "")
+                    .put("retry", true).put("retryAt", Gemini.nextReset()))
+                dailyLimitUntil = Gemini.nextReset()
+            } else fail(ctx, id, call, e.message ?: "오류", e.retry)
         } catch (e: java.io.IOException) {
             fail(ctx, id, call, "인터넷 연결이 끊겼어요. 다시 시도할게요.", true)
         } catch (e: OutOfMemoryError) {

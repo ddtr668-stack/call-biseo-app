@@ -402,6 +402,7 @@ function viewCalls(){
   const queued = S.calls.filter(c => c.status === 'queued').length;
   if (queued && st.block === 'nokey') h += `<div class="note warn">요약을 기다리는 통화가 ${queued}개 있어요. 설정에서 Gemini API 키를 넣으면 바로 시작해요.<div class="acts"><button class="btn small" data-act="tab" data-k="set">API 키 넣기</button></div></div>`;
   else if (queued && st.block === 'offline') h += `<div class="note warn">인터넷이 연결되면 통화 ${queued}개를 요약할게요.</div>`;
+  else if (queued && st.block === 'daily') h += `<div class="note warn">오늘 쓸 수 있는 AI 사용량을 다 써서 통화 ${queued}개가 기다리고 있어요. 매일 오후 5시쯤 한도가 채워지면 이어서 요약해요.</div>`;
   else if (queued && st.block === 'wifi') h += `<div class="note warn">와이파이에 연결되면 통화 ${queued}개를 요약할게요. (설정에서 바꿀 수 있어요)</div>`;
   const fresh = S.calls.filter(c => c.status === 'new' && c.ts > Date.now() - 7*864e5);
   if (fresh.length && S.set.apiKey) h += `<div class="note">아직 요약하지 않은 최근 7일 통화가 ${fresh.length}개 있어요.<div class="acts"><button class="btn small" data-act="queueRecent">모두 요약하기</button></div></div>`;
@@ -696,27 +697,32 @@ function callLine(c){
   return `[${c.id}] ${when} | ${who} | ${c.category||''} | ${c.title||''} | 요약: ${(c.summary||[]).join(' ')}${acts?' | 할일: '+acts:''}${c.memo?' | 메모: '+c.memo:''}`;
 }
 function buildContext(question, contact){
-  const lines = []; let size = 0;
-  for (const c of S.calls){ const l = callLine(c); if (size + l.length > 180000) break; lines.push(l); size += l.length; }
-  // full transcripts of the calls that look most relevant
-  const words = question.toLowerCase().split(/[\s,.?!]+/).filter(w => w.length >= 2).map(w => w.replace(/(은|는|이|가|을|를|에|에게|한테|랑|과|와|의|도|님|씨|이랑)$/,'')).filter(w => w.length >= 2);
+  // AI에 보내는 양을 줄여야 무료 한도에 덜 걸린다: 관련된 통화 위주로만
+  const words = question.toLowerCase().split(/[\s,.?!]+/).map(w => w.replace(/(은|는|이|가|을|를|에|에게|한테|랑|과|와|의|도|님|씨|이랑)$/,'')).filter(w => w.length >= 2);
   const done = S.calls.filter(c => c.status === 'done');
-  let picked = contact ? done.filter(c => c.contact === contact).slice(0, 12) : [];
-  const scored = done.map(c => {
-    const t = searchText(c); let s = 0;
+  const score = c => { const t = searchText(c); let s = 0;
     for (const w of words){ if ((c.contact||'').toLowerCase().includes(w) || (c.company||'').toLowerCase().includes(w)) s += 5; if (t.includes(w)) s += 1; }
-    return [s, c];
-  }).filter(x => x[0] > 0).sort((a,b) => b[0] - a[0] || b[1].ts - a[1].ts);
-  scored.slice(0, 8).forEach(x => { if (!picked.includes(x[1])) picked.push(x[1]); });
-  if (/오늘|어제|방금|최근|아까/.test(question)) done.slice(0, 4).forEach(c => { if (!picked.includes(c)) picked.push(c); });
-  let tx = ''; const LIM = 90000;
+    return s; };
+  const scored = done.map(c => [score(c), c]).filter(x => x[0] > 0).sort((a,b) => b[0] - a[0] || b[1].ts - a[1].ts);
+  const callish = contact || scored.length || /통화|전화|거래처|고객|할\s*일|약속|일정|견적|주문|납품|단가|수금|클레임|브리핑|요약|정리|누가|언제|얼마|오늘|어제|이번\s*주|지난/.test(question);
+  if (!callish) return `(이번 질문은 통화 기록과 관계없어 보여서 기록을 생략했어요. 요약된 통화 ${done.length}건이 있어요.)`;
+  const lines = []; let size = 0; const seen = new Set();
+  const addLine = c => { if (seen.has(c.id)) return; const l = callLine(c); if (size + l.length > 24000) return; seen.add(c.id); lines.push(l); size += l.length; };
+  if (contact) S.calls.filter(c => c.contact === contact).forEach(addLine);
+  scored.slice(0, 30).forEach(x => addLine(x[1]));
+  S.calls.slice(0, 60).forEach(addLine);
+  let picked = contact ? done.filter(c => c.contact === contact).slice(0, 8) : [];
+  scored.slice(0, 4).forEach(x => { if (!picked.includes(x[1])) picked.push(x[1]); });
+  if (/오늘|어제|방금|아까/.test(question)) done.slice(0, 3).forEach(c => { if (!picked.includes(c)) picked.push(c); });
+  let tx = ''; const LIM = contact ? 30000 : 18000;
   for (const c of picked){
-    const t = (c.transcript||[]).map(x => `${x.s === '나' ? '나' : '상대'}: ${x.t}`).join('\n');
+    let t = (c.transcript||[]).map(x => `${x.s === '나' ? '나' : '상대'}: ${x.t}`).join('\n');
+    if (t.length > 8000) t = t.slice(0, 8000) + '\n(이하 생략)';
     if (tx.length + t.length > LIM) break;
     tx += `\n\n### [${c.id}] ${c.contact} ${dayLabel(c.ts)} ${timeLabel(c.ts)} 대화 원문\n${t}`;
   }
-  const meta = Object.entries(S.data.contacts).filter(([k,v]) => v.memo).map(([k,v]) => `${k}: ${v.memo}`).join('\n');
-  return `## 통화 목록 (최근순, 총 ${S.calls.length}건)\n${lines.join('\n') || '(아직 없음)'}` + (meta ? `\n\n## 거래처 메모\n${meta}` : '') + (tx ? `\n\n## 관련 통화 원문${tx}` : '');
+  const meta = Object.entries(S.data.contacts).filter(([k,v]) => v.memo).map(([k,v]) => `${k}: ${v.memo}`).join('\n').slice(0, 4000);
+  return `## 관련 통화 (전체 ${S.calls.length}건 중 ${lines.length}건)\n${lines.join('\n') || '(없음)'}` + (meta ? `\n\n## 거래처 메모\n${meta}` : '') + (tx ? `\n\n## 관련 통화 원문${tx}` : '');
 }
 const ID_RE = /\[((?:ms|f)_[A-Za-z0-9]+)\]/g;
 function cleanAnswer(t){
@@ -743,7 +749,7 @@ async function ask(q, contact){
 
 # 통화 기록
 ${buildContext(q, contact)}`;
-  const hist = S.data.chat.slice(-9, -1).filter(m => !m.err).map(m => ({role: m.role === 'user' ? 'user' : 'model', parts:[{text: m.text}]}));
+  const hist = S.data.chat.slice(-7, -1).filter(m => !m.err).map(m => ({role: m.role === 'user' ? 'user' : 'model', parts:[{text: m.text}]}));
   const body = {
     systemInstruction: {parts:[{text: sys}]},
     contents: hist.concat([{role:'user', parts:[{text:q}]}]),
