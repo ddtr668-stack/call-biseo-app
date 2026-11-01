@@ -148,6 +148,7 @@ class NativeBridge(private val act: MainActivity) {
         o.put("wifiOnly", Prefs.wifiOnly(ctx))
         o.put("popup", Prefs.popup(ctx))
         o.put("popupPos", prefs.getString("popupPos", "bottom"))
+        o.put("fontSize", prefs.getString("fontSize", "m"))
         o.put("recPath", prefs.getString("recPath", Prefs.DEFAULT_PATHS))
         o.put("myInfo", Prefs.myInfo(ctx))
         o.put("calId", prefs.getString("calId", ""))
@@ -165,6 +166,7 @@ class NativeBridge(private val act: MainActivity) {
         if (key in boolKeys) e.putBoolean(key, value == "true") else e.putString(key, value.trim())
         e.apply()
         if (key == "recPath") pool.execute { Processor.sync(ctx) }
+        if (key == "fontSize") act.runOnUiThread { act.applyFont() }
         if (key == "apiKey" || key == "wifiOnly") Processor.kick(ctx)
     }
 

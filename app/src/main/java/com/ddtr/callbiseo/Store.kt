@@ -16,6 +16,8 @@ object Prefs {
     fun auto(ctx: Context): Boolean = of(ctx).getBoolean("auto", true)
     fun wifiOnly(ctx: Context): Boolean = of(ctx).getBoolean("wifiOnly", false)
     fun popup(ctx: Context): Boolean = of(ctx).getBoolean("popup", true)
+    /** 글씨 크기: s 작게 / m 보통 / l 크게 → 배율 */
+    fun fontScale(ctx: Context): Float = when (of(ctx).getString("fontSize", "m")) { "s" -> 0.9f; "l" -> 1.18f; else -> 1f }
     fun recPaths(ctx: Context): List<String> =
         (of(ctx).getString("recPath", DEFAULT_PATHS) ?: DEFAULT_PATHS)
             .split(',').map { it.trim() }.filter { it.isNotEmpty() }

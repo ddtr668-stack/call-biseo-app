@@ -33,7 +33,7 @@ class MainActivity : Activity() {
 
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
-        web.settings.textZoom = 100
+        applyFont()
         web.settings.allowFileAccess = false
         web.settings.allowContentAccess = false
 
@@ -105,6 +105,10 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         bridge.onPermResult()
+    }
+
+    fun applyFont() {
+        web.settings.textZoom = (Prefs.fontScale(this) * 100).toInt()
     }
 
     fun openExternal(u: Uri) {

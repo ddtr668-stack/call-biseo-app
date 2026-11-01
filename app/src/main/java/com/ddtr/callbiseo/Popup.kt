@@ -51,10 +51,11 @@ object Popup {
         val muted = if (night) 0xFF9AA8A1.toInt() else 0xFF66756E.toInt()
         val green = if (night) 0xFF5BBE9E.toInt() else 0xFF1F6B55.toInt()
         val rule = if (night) 0xFF2A3430.toInt() else 0xFFDCE3DC.toInt()
+        val scale = Prefs.fontScale(ctx)
         fun dp(v: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, ctx.resources.displayMetrics).toInt()
         fun text(s: String, size: Float, color: Int, bold: Boolean = false, lines: Int = 0) = TextView(ctx).apply {
             this.text = s
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, size)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, size * scale)
             setTextColor(color)
             if (bold) typeface = Typeface.DEFAULT_BOLD
             if (lines > 0) { maxLines = lines; ellipsize = TextUtils.TruncateAt.END }

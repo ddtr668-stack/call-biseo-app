@@ -747,6 +747,8 @@ function viewSettings(){
   const permRow = (k, title, desc, ok) => `<div class="srow"><div class="l"><b>${title}</b><small>${desc}</small></div>${ok?'<span class="ok-t">허용됨</span>':`<button class="mini" data-act="perm" data-perm="${k}">허용</button>`}</div>`;
   const cals = p.calendar ? JSON.parse(N.calendars()) : [];
   let h = `<div class="top"><h1>설정</h1></div>`;
+  h += `<div class="group"><h3>글씨 크기</h3><div class="box"><div class="field"><div class="seg">${[['s','작게'],['m','보통'],['l','크게']].map(([v,l]) => `<button data-act="font" data-k="${v}" class="${(s.fontSize||'m')===v?'on':''}" style="font-size:${v==='s'?13:v==='l'?17:15}px">${l}</button>`).join('')}</div>
+    <small>앱 화면과 요약 팝업 글씨가 함께 바뀌어요.</small></div></div></div>`;
   h += `<div class="group"><h3>AI 요약 (Gemini)</h3><div class="box">
     <div class="field"><label for="apikey">API 키</label><div class="inl"><input id="apikey" type="password" value="${esc(s.apiKey)}" placeholder="AIza로 시작하는 키" autocomplete="off"><button class="btn small" data-act="saveKey">저장</button></div>
       <small>구글 AI 스튜디오에서 무료로 만들 수 있어요. <button class="link" data-act="url" data-u="https://aistudio.google.com/apikey">키 만들기</button><br>
@@ -929,6 +931,7 @@ document.addEventListener('click', e => {
     case 'closeDlg': closeDialog(); break;
     case 'popOpen': closeDialog(); openCall(d.id); break;
     case 'popPos': N.setSetting('popupPos', d.k); S.set.popupPos = d.k; render(); toast(`팝업을 ${el.textContent}쪽에 띄울게요`.replace('가운데쪽','가운데')); break;
+    case 'font': N.setSetting('fontSize', d.k); S.set.fontSize = d.k; render(); break;
     case 'popPreview': if (!N.popupPreview()) toast('다른 앱 위에 표시를 먼저 허용해 주세요'); break;
     case 'pickAudio': N.pickAudio(); break;
     case 'sub': S.page.sub = d.k; renderPage(true); break;
