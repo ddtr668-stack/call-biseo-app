@@ -402,8 +402,8 @@ class NativeBridge(private val act: MainActivity) {
     private fun authMessage(e: GoogleAuthException): String {
         val m = e.message ?: ""
         return when {
-            m.contains("UNREGISTERED_ON_API_CONSOLE") ->
-                "구글 클라우드에 이 앱이 아직 등록되지 않았어요. (패키지 com.ddtr.callbiseo, SHA-1 등록 필요)"
+            m.contains("UNREGISTERED_ON_API_CONSOLE", true) || m.contains("UnregisteredOnApiConsole", true) ->
+                "구글 클라우드에 이 앱을 아직 등록하지 않았어요. 등록하고 5분쯤 뒤에 다시 연결해 주세요."
             m.contains("BadUsername") || m.contains("BadAuthentication") -> "이 휴대폰에 없는 구글 계정이에요."
             m.contains("NeedPermission") -> "구글 권한을 허용해야 해요."
             else -> "구글 로그인에 실패했어요 ($m)"
