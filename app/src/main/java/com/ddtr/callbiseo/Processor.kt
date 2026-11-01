@@ -42,8 +42,9 @@ object Processor {
         for (r in recs) {
             seen.add(r.id)
             if (known.contains(r.id)) continue
-            val status = if (auto && r.ts >= since) "queued" else "new"
-            fresh.add(Recordings.newCall(ctx, r, status))
+            val call = Recordings.newCall(ctx, r, if (auto && r.ts >= since) "queued" else "new")
+            if (Prefs.isSkipped(ctx, call.optString("contact"), call.optString("number"))) call.put("status", "skip")
+            fresh.add(call)
         }
         Store.putAll(ctx, fresh)
         // recordings deleted from the phone: keep the summary, mark the audio as gone

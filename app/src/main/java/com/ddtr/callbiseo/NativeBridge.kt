@@ -73,6 +73,13 @@ class NativeBridge(private val act: MainActivity) {
     @JavascriptInterface
     fun removeCall(id: String) { Store.remove(ctx, id) }
 
+    /** 여러 통화의 상태를 한 번에 바꾼다 (요약 제외 등) */
+    @JavascriptInterface
+    fun setStatusMany(idsJson: String, status: String) {
+        val ids = try { JSONArray(idsJson) } catch (e: Exception) { JSONArray() }
+        Store.patchMany(ctx, (0 until ids.length()).map { ids.optString(it) }, JSONObject().put("status", status))
+    }
+
     /** Summarise these calls (again). */
     @JavascriptInterface
     fun queue(idsJson: String) {
@@ -150,6 +157,7 @@ class NativeBridge(private val act: MainActivity) {
         o.put("popup", Prefs.popup(ctx))
         o.put("popupPos", prefs.getString("popupPos", "bottom"))
         o.put("fontSize", prefs.getString("fontSize", "m"))
+        o.put("skipList", Prefs.skipList(ctx))
         o.put("recPath", prefs.getString("recPath", Prefs.DEFAULT_PATHS))
         o.put("myInfo", Prefs.myInfo(ctx))
         o.put("calId", prefs.getString("calId", ""))

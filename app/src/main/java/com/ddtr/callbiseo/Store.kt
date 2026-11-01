@@ -16,6 +16,25 @@ object Prefs {
     fun auto(ctx: Context): Boolean = of(ctx).getBoolean("auto", true)
     fun wifiOnly(ctx: Context): Boolean = of(ctx).getBoolean("wifiOnly", false)
     fun popup(ctx: Context): Boolean = of(ctx).getBoolean("popup", true)
+    /** 요약 제외 목록: [{"name":"엄마","number":"01012345678"}] */
+    fun skipList(ctx: Context): org.json.JSONArray =
+        try { org.json.JSONArray(of(ctx).getString("skipList", "[]")) } catch (e: Exception) { org.json.JSONArray() }
+
+    private fun digits(s: String) = s.filter { it.isDigit() }
+
+    fun isSkipped(ctx: Context, name: String, number: String): Boolean {
+        val list = skipList(ctx)
+        val num = digits(number)
+        for (i in 0 until list.length()) {
+            val e = list.optJSONObject(i) ?: continue
+            val n = digits(e.optString("number"))
+            if (n.length >= 7 && num.length >= 7 && (num.endsWith(n.takeLast(8)) || n.endsWith(num.takeLast(8)))) return true
+            val nm = e.optString("name").trim()
+            if (nm.isNotEmpty() && nm == name.trim()) return true
+        }
+        return false
+    }
+
     /** 글씨 크기: s 작게 / m 보통 / l 크게 → 배율 */
     fun fontScale(ctx: Context): Float = when (of(ctx).getString("fontSize", "m")) { "s" -> 0.9f; "l" -> 1.18f; else -> 1f }
     fun recPaths(ctx: Context): List<String> =
@@ -132,6 +151,21 @@ object Store {
         }
         changed(id)
         return true
+    }
+
+    /** 여러 통화에 같은 값을 한 번에 (파일 저장 1번) */
+    fun patchMany(ctx: Context, ids: List<String>, fields: JSONObject) {
+        if (ids.isEmpty()) return
+        synchronized(lock) {
+            val map = load(ctx)
+            for (id in ids) {
+                val o = map[id] ?: continue
+                val keys = fields.keys()
+                while (keys.hasNext()) { val k = keys.next(); if (k != "id") o.put(k, fields.get(k)) }
+            }
+            save(ctx, map)
+        }
+        changed("")
     }
 
     fun remove(ctx: Context, id: String) {

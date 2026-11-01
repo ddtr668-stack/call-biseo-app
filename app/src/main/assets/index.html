@@ -444,6 +444,7 @@ function filterCalls(){
   return S.calls.filter(c => {
     if (S.filter === 'todo' && !openActs(c).length) return false;
     if (S.filter === 'new' && c.status === 'done') return false;
+    if (c.status === 'skip' && S.filter !== 'new' && !S.q.trim()) return false;
     if (S.filter === 'star' && !c.star) return false;
     if (!q) return true;
     return searchText(c).includes(q);
@@ -462,6 +463,7 @@ function statusHtml(c){
   if (c.status === 'queued') return `<div class="state">요약 대기 중</div>`;
   if (c.status === 'error') return `<div class="state err">${esc(c.error || '요약하지 못했어요')}</div>`;
   if (c.status === 'new') return `<div class="state">요약 전</div>`;
+  if (c.status === 'skip') return `<div class="state">요약 제외한 번호예요</div>`;
   return '';
 }
 function callRow(c){
@@ -474,7 +476,7 @@ function callRow(c){
     meta = `<div class="cmeta">${c.category ? `<span class="tag ${tone==='grey'?'':tone}">${esc(c.category)}</span>` : ''}
       ${acts.length ? `<span class="tag amber">할 일 ${acts.length}</span>` : ''}
       ${c.star ? '<span class="tag amber">중요</span>' : ''}<span class="num">${durLabel(c.dur)}</span></div>`;
-  } else if (c.status === 'new' || c.status === 'error'){
+  } else if (c.status === 'new' || c.status === 'error' || c.status === 'skip'){
     meta = `<div class="cmeta"><button class="mini" data-act="queue" data-id="${esc(c.id)}">${c.status==='error'?'다시 요약':'요약하기'}</button><span class="num">${durLabel(c.dur)}</span></div>`;
   }
   return `<div class="crow" role="button" tabindex="0" data-act="open" data-id="${esc(c.id)}">${ava(c.contact)}
@@ -519,7 +521,7 @@ function pageCall(){
     h += `<div class="stamprow">${c.category ? `<span class="stamp ${tone==='green'?'':tone}">${esc(c.category)}</span>` : ''}
       ${c.mood ? `<span class="tag ${c.mood==='긍정'?'green':c.mood==='부정'?'red':''}">상대 반응 ${esc(c.mood)}</span>` : ''}</div>`;
   } else {
-    h += `<div class="sec">${statusHtml(c)}${c.status==='new'||c.status==='error' ? `<div style="margin-top:10px"><button class="btn" data-act="queue" data-id="${esc(c.id)}">${c.status==='error'?'다시 요약하기':'지금 요약하기'}</button></div>`:''}</div>`;
+    h += `<div class="sec">${statusHtml(c)}${c.status==='new'||c.status==='error'||c.status==='skip' ? `<div style="margin-top:10px"><button class="btn" data-act="queue" data-id="${esc(c.id)}">${c.status==='error'?'다시 요약하기':'지금 요약하기'}</button></div>`:''}</div>`;
   }
   if (!c.gone) h += `<div class="player"><button class="pp" data-act="play" aria-label="재생">${I.play}</button>
     <input type="range" id="seek" min="0" max="${Math.max(1,(c.dur||0)*1000)}" value="0" aria-label="재생 위치">
@@ -830,6 +832,12 @@ function viewSettings(){
     <div class="srow"><div class="l"><b>녹음 파일 직접 추가</b><small>다른 앱의 녹음도 넣을 수 있어요. 파일 앱에서 '공유 › 상규 통화비서'도 돼요.</small></div><button class="mini" data-act="pickAudio">추가</button></div>
     <div class="field"><label for="recpath">녹음 폴더</label><input id="recpath" data-set="recPath" value="${esc(s.recPath)}"><small>기본값: Recordings/Call/,Call/ (쉼표로 여러 개)</small></div>
   </div></div>`;
+  const skip = s.skipList || [];
+  h += `<div class="group"><h3>요약 제외</h3><div class="box">
+    <div class="field"><small style="margin:0 0 8px">가족·지인처럼 요약할 필요 없는 사람은 자동 요약하지 않아요. 통화 목록에도 안 보이고, '요약 안 됨'에서 찾아 직접 요약할 수 있어요.</small>
+      <div class="inl"><input id="skipin" placeholder="이름 또는 전화번호" autocomplete="off"><button class="btn small" data-act="skipAdd">추가</button></div></div>
+    ${skip.map((e,i) => `<div class="srow"><div class="l"><b>${esc(e.name || Recfmt(e.number))}</b>${e.name && e.number ? `<small>${esc(Recfmt(e.number))}</small>` : ''}</div><button class="mini" style="border-color:var(--rule);color:var(--muted)" data-act="skipDel" data-i="${i}">빼기</button></div>`).join('')}
+  </div></div>`;
   h += `<div class="group"><h3>백업</h3><div class="box">
     <div class="srow"><div class="l"><b>요약·메모 백업 저장</b><small>녹음 파일은 빼고 저장해요</small></div><button class="mini" data-act="backup">저장</button></div>
     <div class="srow"><div class="l"><b>백업 불러오기</b></div><label class="mini" style="display:inline-block">불러오기<input type="file" id="restore" accept="application/json,.json" style="display:none"></label></div>
@@ -893,9 +901,26 @@ function summaryPopup(id){
     ${acts.length ? `<div style="border-top:1px solid var(--rule2);margin-top:6px;padding-top:8px">${acts.slice(0,3).map(a => `<div style="color:var(--green);font-weight:700;font-size:14px;padding:3px 0">✓ ${esc(a.title)} <span style="color:var(--muted);font-weight:500">(${esc(dateLabel(a.date, a.time))})</span></div>`).join('')}</div>` : ''}
     <div class="btns"><button class="btn ghost" data-act="closeDlg">닫기</button><button class="btn" data-act="popOpen" data-id="${esc(id)}">자세히 보기</button></div>`);
 }
+function Recfmt(n){ const d = String(n||'').replace(/\D/g,''); if (d.length === 11 && d.startsWith('01')) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`; if (d.length === 10) return d.startsWith('02') ? `${d.slice(0,2)}-${d.slice(2,6)}-${d.slice(6)}` : `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`; return n || ''; }
+function skipMatch(e, c){
+  const dn = String(c.number||'').replace(/\D/g,''), en = String(e.number||'').replace(/\D/g,'');
+  if (en.length >= 7 && dn.length >= 7 && (dn.endsWith(en.slice(-8)) || en.endsWith(dn.slice(-8)))) return true;
+  return !!(e.name && e.name.trim() === String(c.contact||'').trim());
+}
+function addSkip(entry){
+  const list = (S.set.skipList || []).slice();
+  if (list.some(e => (entry.number && e.number === entry.number) || (entry.name && e.name === entry.name))){ toast('이미 요약 제외에 있어요'); return; }
+  list.push(entry); S.set.skipList = list; N.setSetting('skipList', JSON.stringify(list));
+  // 아직 요약 안 한 통화는 바로 제외 처리
+  const ids = S.calls.filter(c => (c.status === 'new' || c.status === 'queued' || c.status === 'error') && skipMatch(entry, c)).map(c => c.id);
+  if (ids.length) N.setStatusMany(JSON.stringify(ids), 'skip');
+  toast(`${entry.name || Recfmt(entry.number)} 통화는 이제 요약하지 않아요`);
+  render();
+}
 function callMenu(){
   const c = S.byId[S.page.id];
   dialog(`<h3>${esc(c.contact)} 통화</h3><div class="box" style="border:0">
+    ${(S.set.skipList||[]).some(e => skipMatch(e, c)) ? '' : `<div class="srow" data-act="skipThis" role="button"><div class="l"><b>이 사람 요약 제외</b><small>앞으로 이 사람과의 통화는 자동 요약하지 않아요</small></div></div>`}
     <div class="srow" data-act="renameCall" role="button"><div class="l"><b>상대 이름 고치기</b><small>이 사람의 다른 통화도 함께 바꿀 수 있어요</small></div></div>
     ${c.status==='done'?`<div class="srow" data-act="requeue" role="button"><div class="l"><b>다시 요약하기</b><small>요약이 이상할 때. 고친 할 일은 새로 바뀌어요</small></div></div>`:''}
     <div class="srow" data-act="hideCall" role="button"><div class="l"><b style="color:var(--red)">목록에서 지우기</b><small>앱에서만 지워져요. 휴대폰의 녹음 파일은 그대로예요</small></div></div>
@@ -975,6 +1000,15 @@ document.addEventListener('click', e => {
     case 'perm': N.askPerm(d.perm); break;
     case 'guide': guide(); break;
     case 'closeDlg': closeDialog(); break;
+    case 'skipThis': { closeDialog(); const c = S.byId[S.page.id]; addSkip({name: /\d{3}/.test(c.contact) ? '' : c.contact, number: c.number || ''}); break; }
+    case 'skipAdd': {
+      const v = ($('#skipin').value || '').trim(); if (!v){ toast('이름이나 전화번호를 적어 주세요'); break; }
+      const digits = v.replace(/[\s\-+()]/g,'');
+      addSkip(/^\d{7,}$/.test(digits) ? {name:'', number: digits} : {name: v, number: ''}); break;
+    }
+    case 'skipDel': { const list = (S.set.skipList||[]).slice(); const e = list.splice(+d.i, 1)[0]; S.set.skipList = list; N.setSetting('skipList', JSON.stringify(list));
+      const ids = S.calls.filter(c => c.status === 'skip' && e && skipMatch(e, c)).map(c => c.id); if (ids.length) N.setStatusMany(JSON.stringify(ids), 'new');
+      toast('요약 제외에서 뺐어요'); render(); break; }
     case 'popOpen': closeDialog(); openCall(d.id); break;
     case 'popPos': N.setSetting('popupPos', d.k); S.set.popupPos = d.k; render(); toast(`팝업을 ${el.textContent}쪽에 띄울게요`.replace('가운데쪽','가운데')); break;
     case 'font': N.setSetting('fontSize', d.k); S.set.fontSize = d.k; render(); break;

@@ -23,7 +23,7 @@
     {id:'ms_6', uri:'content://m/6', file:'x', contact:'통화 이정아 과장', ts: now - 8*D, dur: 75, status:'new'},
   ];
   if (location.hash === '#stress') for (let i=0;i<600;i++) calls.push({id:'ms_s'+i, uri:'content://m/s'+i, file:'x', contact:'통화 거래처'+(i%40), ts: now - i*3*H, dur: 60+i, status:'new'}); // STRESS
-  let settings = {apiKey:'', model:'', auto:true, wifiOnly:false, popup:true, popupPos:'bottom', fontSize:'m', recPath:'Recordings/Call/,Call/', myInfo:'', calId:'', remindMin:'30', taskAccount:'', taskList:'', taskListName:''};
+  let settings = {apiKey:'', model:'', auto:true, wifiOnly:false, popup:true, popupPos:'bottom', fontSize:'m', skipList:[], recPath:'Recordings/Call/,Call/', myInfo:'', calId:'', remindMin:'30', taskAccount:'', taskList:'', taskListName:''};
   let data = '';
   const later = (id, st, body, ms) => setTimeout(() => window.__native.resolve(id, st, body), ms || 300);
   let audio = {uri:'', playing:false, pos:0, dur:0, speed:1};
@@ -32,11 +32,13 @@
     loadData: () => data, saveData: j => { data = j; },
     calls: () => JSON.stringify(calls),
     patchCall: (id, j) => { const c = calls.find(x => x.id === id); if (c) Object.assign(c, JSON.parse(j)); return !!c; },
+    setStatusMany: (j, st) => { JSON.parse(j).forEach(id => { const c = calls.find(x => x.id === id); if (c) c.status = st; }); setTimeout(() => window.__native.callsChanged(''), 30); },
+    setSetting: (k, v) => { settings[k] = k === 'skipList' ? JSON.parse(v) : v; },
     removeCall: id => { calls = calls.filter(c => c.id !== id); setTimeout(() => window.__native.callsChanged(''), 50); },
     queue: j => { JSON.parse(j).forEach(id => { const c = calls.find(x => x.id === id); if (c) c.status = 'queued'; }); window.__native.callsChanged(''); },
     refresh: id => later(id, 200, '0'),
     workState: () => JSON.stringify({current:'ms_2', block: settings.apiKey ? '' : 'nokey', canRead:true}),
-    pickAudio(){}, settings: () => JSON.stringify(settings), setSetting: (k, v) => { settings[k] = v; },
+    pickAudio(){}, settings: () => JSON.stringify(settings),
     aiModels: id => later(id, 200, JSON.stringify(['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash-lite'])),
     ai: (id, body) => { const q = JSON.parse(body).contents.slice(-1)[0].parts[0].text; const w = q.includes('날씨');
       later(id, 200, JSON.stringify({text: w ? '내일 청주는 맑고 낮 최고 17도, 아침 최저 4도예요. 일교차가 크니 겉옷 챙기세요.' : '이번 주에 하실 일은 2가지예요.\n- **대성건설 수정 견적서** 메일 발송 (내일까지) [ms_1]\n- 한빛철강 H형강 출고 일정 확인 후 회신 [ms_3]', sources: w ? [{title:'weather.go.kr', uri:'https://www.weather.go.kr'}] : []}), 900); },
