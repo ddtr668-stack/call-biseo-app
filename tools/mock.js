@@ -22,6 +22,7 @@
      summary:['10월 납품분 세금계산서를 이번 주 금요일까지 발행해 달라고 요청함.','결제는 다음 달 10일 현금 결제 예정.'], actions:[{id:'c1', type:'todo', title:'10월분 세금계산서 발행', owner:'나', date:t(-4), time:'', note:'', done:true}], keywords:['세금계산서'], transcript:[], star:true},
     {id:'ms_6', uri:'content://m/6', file:'x', contact:'통화 이정아 과장', ts: now - 8*D, dur: 75, status:'new'},
   ];
+  if (location.hash === '#stress') for (let i=0;i<600;i++) calls.push({id:'ms_s'+i, uri:'content://m/s'+i, file:'x', contact:'통화 거래처'+(i%40), ts: now - i*3*H, dur: 60+i, status:'new'}); // STRESS
   let settings = {apiKey:'', model:'', auto:true, wifiOnly:false, popup:true, popupPos:'bottom', fontSize:'m', recPath:'Recordings/Call/,Call/', myInfo:'', calId:'', remindMin:'30', taskAccount:'', taskList:'', taskListName:''};
   let data = '';
   const later = (id, st, body, ms) => setTimeout(() => window.__native.resolve(id, st, body), ms || 300);

@@ -60,6 +60,14 @@ object Store {
                 if (id.isNotEmpty()) map[id] = o
             }
         }
+        // 예전 버전이 '통화 홍길동'처럼 저장한 이름을 한 번에 고친다 (파일 저장 1번)
+        var fixed = false
+        for (o in map.values) {
+            val c = o.optString("contact")
+            val n = c.replace(Recordings.PREFIX_RE, "").trim()
+            if (n.isNotEmpty() && n != c) { o.put("contact", n); fixed = true }
+        }
+        if (fixed) try { save(ctx, map) } catch (e: Exception) { }
         cache = map
         return map
     }

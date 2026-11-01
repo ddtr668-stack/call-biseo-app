@@ -257,12 +257,18 @@ function loadAll(){
   try { S.data = Object.assign({contacts:{}, chat:[]}, JSON.parse(N.loadData() || '{}')); } catch(e){}
   S.set = JSON.parse(N.settings());
   reloadCalls(true);
+  let moved = false;
+  for (const k of Object.keys(S.data.contacts || {})){
+    const f = k.replace(/^(통화\s*녹음|통화|녹음)[\s_-]+/, '');
+    if (f && f !== k){ if (!S.data.contacts[f]) S.data.contacts[f] = S.data.contacts[k]; delete S.data.contacts[k]; moved = true; }
+  }
+  if (moved) saveData();
 }
 function reloadCalls(silent){
   try { S.calls = JSON.parse(N.calls() || '[]'); } catch(e){ S.calls = []; }
   S.calls.sort((a,b) => (b.ts||0) - (a.ts||0));
   S.byId = {}; S.calls.forEach(c => S.byId[c.id] = c);
-  S.calls.forEach(c => { const fixed = String(c.contact||'').replace(/^(통화\s*녹음|통화|녹음)[\s_-]+/, ''); if (fixed && fixed !== c.contact){ const old = c.contact; c.contact = fixed; N.patchCall(c.id, JSON.stringify({contact: fixed})); if (S.data.contacts[old] && !S.data.contacts[fixed]){ S.data.contacts[fixed] = S.data.contacts[old]; delete S.data.contacts[old]; saveData(); } } });
+  S.calls.forEach(c => { const f = String(c.contact||'').replace(/^(통화\s*녹음|통화|녹음)[\s_-]+/, ''); if (f) c.contact = f; });
   if (!silent) render();
 }
 let saveT = 0;
@@ -1054,8 +1060,8 @@ window.__onBack = goBack;
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'chatin'){ e.preventDefault(); ask(e.target.value); } });
 
 // ---------------------------------------------------------------- start
-loadAll();
-render();
+try { loadAll(); render(); }
+catch (e) { document.getElementById('view').innerHTML = `<div class="empty"><b>화면을 여는 중 오류가 났어요</b>${esc(String(e && e.stack || e))}</div>`; }
 refresh(false);
 window.__native.launch();
 setInterval(() => { if (S.calls.some(c => c.status === 'queued' || c.status === 'working') && !S.page && S.tab === 'calls') render(); }, 5000);
