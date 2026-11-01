@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
@@ -66,6 +67,14 @@ object Popup {
             background = GradientDrawable().apply { setColor(bg); cornerRadius = dp(22f).toFloat(); setStroke(dp(1f), rule) }
             elevation = dp(12f).toFloat()
         }
+
+        // drag handle: 끌어서 위치 옮기기
+        val grip = View(ctx).apply { background = GradientDrawable().apply { setColor(rule); cornerRadius = dp(3f).toFloat() } }
+        card.addView(LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, 0, 0, dp(8f))
+            addView(grip, LinearLayout.LayoutParams(dp(40f), dp(5f)))
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = -dp(6f) })
 
         // who + category
         val head = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -134,10 +143,53 @@ object Popup {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
-        lp.gravity = Gravity.BOTTOM
-        lp.y = dp(90f)
+        lp.gravity = Gravity.TOP
+        lp.y = 0
+        holder.alpha = 0f
         wm.addView(holder, lp)
         shownView = holder
+
+        val screenH = ctx.resources.displayMetrics.heightPixels
+        fun clampY(y: Int) = y.coerceIn(dp(24f), maxOf(dp(24f), screenH - holder.height - dp(24f)))
+        // 카드 높이를 안 뒤에 저장된 위치로 옮긴다
+        holder.post {
+            val prefs = Prefs.of(ctx)
+            val h = holder.height
+            lp.y = clampY(when (prefs.getString("popupPos", "bottom")) {
+                "top" -> dp(48f)
+                "center" -> (screenH - h) / 2
+                "custom" -> (prefs.getFloat("popupY", 0.6f) * screenH).toInt()
+                else -> screenH - h - dp(110f)
+            })
+            try { wm.updateViewLayout(holder, lp) } catch (e: Exception) { }
+            holder.alpha = 1f
+        }
+
+        // 카드 빈 곳이나 손잡이를 끌면 위아래로 움직이고, 놓은 자리를 기억한다
+        var downRaw = 0f
+        var startY = 0
+        var moved = false
+        val slop = dp(6f)
+        card.setOnTouchListener { _, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { downRaw = e.rawY; startY = lp.y; moved = false; true }
+                MotionEvent.ACTION_MOVE -> {
+                    val dy = (e.rawY - downRaw).toInt()
+                    if (!moved && kotlin.math.abs(dy) > slop) moved = true
+                    if (moved) {
+                        lp.y = clampY(startY + dy)
+                        try { wm.updateViewLayout(holder, lp) } catch (x: Exception) { }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (moved) Prefs.of(ctx).edit().putString("popupPos", "custom")
+                        .putFloat("popupY", lp.y.toFloat() / screenH).apply()
+                    true
+                }
+                else -> false
+            }
+        }
     }
 
     private fun whenLabel(date: String, time: String): String {

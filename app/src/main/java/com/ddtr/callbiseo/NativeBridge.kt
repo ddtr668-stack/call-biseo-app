@@ -147,6 +147,7 @@ class NativeBridge(private val act: MainActivity) {
         o.put("auto", Prefs.auto(ctx))
         o.put("wifiOnly", Prefs.wifiOnly(ctx))
         o.put("popup", Prefs.popup(ctx))
+        o.put("popupPos", prefs.getString("popupPos", "bottom"))
         o.put("recPath", prefs.getString("recPath", Prefs.DEFAULT_PATHS))
         o.put("myInfo", Prefs.myInfo(ctx))
         o.put("calId", prefs.getString("calId", ""))
@@ -263,6 +264,23 @@ class NativeBridge(private val act: MainActivity) {
     }
 
     // ---------- calendar ----------
+    /** Show the over-other-apps card with the latest summary, to check where it appears. */
+    @JavascriptInterface
+    fun popupPreview(): Boolean {
+        if (!Popup.allowed(ctx)) return false
+        val arr = JSONArray(Store.allJson(ctx))
+        var best: JSONObject? = null
+        for (i in 0 until arr.length()) {
+            val c = arr.optJSONObject(i) ?: continue
+            if (c.optString("status") == "done" && (best == null || c.optLong("ts") > best.optLong("ts"))) best = c
+        }
+        val sample = best ?: JSONObject().put("id", "").put("contact", "미리 보기").put("title", "팝업이 여기에 떠요")
+            .put("summary", JSONArray().put("카드를 위아래로 끌어서 원하는 자리에 놓으세요.").put("놓은 자리를 기억해요."))
+        Popup.show(ctx, sample)
+        act.runOnUiThread { act.moveTaskToBack(true) }
+        return true
+    }
+
     @JavascriptInterface
     fun calendars(): String = Cal.list(ctx)
 

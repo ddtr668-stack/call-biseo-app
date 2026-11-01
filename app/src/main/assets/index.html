@@ -755,6 +755,9 @@ function viewSettings(){
       <button class="btn ghost small" data-act="loadModels">불러오기</button></div><small>잘 모르겠으면 자동 선택에 두세요. 'flash'가 빠르고 저렴해요.</small></div>
     <div class="srow"><div class="l"><b>통화 끝나면 자동 요약</b><small>새 녹음이 생기면 바로 받아쓰고 요약해서 알림을 보내요</small></div>${tg('auto', s.auto)}</div>
     <div class="srow"><div class="l"><b>요약 끝나면 팝업으로 보기</b><small>${p.overlay ? '다른 앱을 쓰고 있어도 화면 위에 요약 카드를 띄워요' : '화면 위 팝업 권한을 허용하면 다른 앱 위에도 카드로 떠요. 지금은 화면 위쪽 알림으로 보여요.'}</small></div>${tg('popup', s.popup)}</div>
+    ${s.popup && p.overlay ? `<div class="field"><label>팝업 위치</label><div class="seg" id="ppos">${[['top','위'],['center','가운데'],['bottom','아래']].map(([v,l]) => `<button data-act="popPos" data-k="${v}" class="${(s.popupPos||'bottom')===v?'on':''}">${l}</button>`).join('')}</div>
+      <small>${s.popupPos==='custom' ? '지금은 직접 옮긴 자리에 떠요. ' : ''}팝업 카드를 위아래로 끌어서 원하는 자리에 놓아도 돼요. 놓은 자리를 기억해요.</small>
+      <div style="margin-top:8px"><button class="btn ghost small" data-act="popPreview">팝업 미리 보기</button></div></div>` : ''}
     ${s.popup && !p.overlay ? `<div class="srow"><div class="l"><b>다른 앱 위에 표시</b><small>설정 화면에서 '상규 통화비서'를 켜 주세요</small></div><button class="mini" data-act="perm" data-perm="overlay">허용</button></div>` : ''}
     <div class="srow"><div class="l"><b>와이파이에서만 요약</b><small>모바일 데이터를 아끼고 싶을 때</small></div>${tg('wifiOnly', s.wifiOnly)}</div>
     <div class="field"><label for="myinfo">내 소개 (요약 품질이 좋아져요)</label><textarea id="myinfo" rows="3" data-set="myInfo" placeholder="예: 이상규, ○○산업 영업팀. 주로 건설 자재(철근, 형강) 납품. 거래처는 현장 소장님들.">${esc(s.myInfo)}</textarea></div>
@@ -925,6 +928,8 @@ document.addEventListener('click', e => {
     case 'guide': guide(); break;
     case 'closeDlg': closeDialog(); break;
     case 'popOpen': closeDialog(); openCall(d.id); break;
+    case 'popPos': N.setSetting('popupPos', d.k); S.set.popupPos = d.k; render(); toast(`팝업을 ${el.textContent}쪽에 띄울게요`.replace('가운데쪽','가운데')); break;
+    case 'popPreview': if (!N.popupPreview()) toast('다른 앱 위에 표시를 먼저 허용해 주세요'); break;
     case 'pickAudio': N.pickAudio(); break;
     case 'sub': S.page.sub = d.k; renderPage(true); break;
     case 'star': { const c = S.byId[S.page.id]; patch(c.id, {star: !c.star}); renderPage(); break; }
