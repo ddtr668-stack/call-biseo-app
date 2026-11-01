@@ -1,0 +1,1023 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>상규 통화비서</title>
+<style>
+:root{
+  --paper:#F6F7F2; --sheet:#FFFFFF; --ink:#1D2A26; --muted:#66756E; --faint:#97A39C;
+  --rule:#DCE3DC; --rule2:#EDF1EC; --green:#1F6B55; --green-soft:#E3EFE9; --red:#C8372D; --red-soft:#F8E6E3;
+  --amber:#A4690B; --amber-soft:#F6EDDA; --shadow:0 10px 30px rgba(20,40,32,.16);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#121715; --sheet:#1A211E; --ink:#E4EBE7; --muted:#9AA8A1; --faint:#6E7C75;
+    --rule:#2A3430; --rule2:#212925; --green:#5BBE9E; --green-soft:#1D3229; --red:#EB6A5E; --red-soft:#3A2220;
+    --amber:#E0A743; --amber-soft:#33291A; --shadow:0 10px 30px rgba(0,0,0,.45);
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--paper);color:var(--ink)}
+body{font-family:"Pretendard","SamsungOneKorean","Noto Sans KR",system-ui,sans-serif;font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;overscroll-behavior:none}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+.num{font-variant-numeric:tabular-nums}
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+#view{flex:1;overflow-y:auto;padding:0 0 24px}
+.top{position:sticky;top:0;z-index:5;background:var(--paper);padding:14px 16px 10px}
+.top h1{margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em}
+.top .row{display:flex;align-items:center;gap:8px}
+.top .row h1{flex:1}
+.iconbtn{width:40px;height:40px;border:0;background:transparent;border-radius:20px;display:grid;place-items:center;color:var(--ink)}
+.iconbtn:active{background:var(--rule2)}
+.iconbtn svg{width:22px;height:22px}
+.search{margin-top:10px;display:flex;align-items:center;gap:8px;background:var(--sheet);border:1px solid var(--rule);border-radius:12px;padding:0 12px}
+.search input{flex:1;border:0;background:transparent;height:42px;outline:none}
+.search svg{width:18px;height:18px;color:var(--faint)}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:10px 16px 2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--rule);background:transparent;border-radius:999px;padding:5px 12px;font-size:13.5px;color:var(--muted)}
+.chip.on{background:var(--ink);border-color:var(--ink);color:var(--paper);font-weight:600}
+/* bottom nav */
+nav{display:flex;background:var(--sheet);border-top:1px solid var(--rule);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:transparent;padding:8px 0 7px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11.5px;color:var(--faint);position:relative}
+nav button svg{width:23px;height:23px}
+nav button.on{color:var(--green);font-weight:700}
+nav .dot{position:absolute;top:5px;left:calc(50% + 8px);min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--red);color:#fff;font-size:10.5px;font-weight:700;display:grid;place-items:center}
+/* ledger rows */
+.dayhead{padding:18px 16px 6px;font-size:13px;font-weight:700;color:var(--muted)}
+.ledger{background:var(--sheet);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.crow{display:flex;gap:12px;padding:13px 16px;border-bottom:1px solid var(--rule2);align-items:flex-start;width:100%;text-align:left;background:transparent;border-left:0;border-right:0;border-top:0}
+.crow:last-child{border-bottom:0}
+.crow:active{background:var(--rule2)}
+.ava{flex:none;width:40px;height:40px;border-radius:13px;display:grid;place-items:center;font-weight:800;font-size:16px;color:#fff}
+.cmain{flex:1;min-width:0}
+.cline1{display:flex;align-items:baseline;gap:6px}
+.cname{font-weight:700;font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ccomp{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.ctime{flex:none;font-size:12.5px;color:var(--faint)}
+.ctitle{margin-top:2px;font-size:14.5px;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cmeta{margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:6px;font-size:12px;font-weight:600;background:var(--rule2);color:var(--muted)}
+.tag.green{background:var(--green-soft);color:var(--green)}
+.tag.red{background:var(--red-soft);color:var(--red)}
+.tag.amber{background:var(--amber-soft);color:var(--amber)}
+.state{font-size:13.5px;color:var(--muted)}
+.state.err{color:var(--red)}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--green-soft);border-top-color:var(--green);border-radius:50%;animation:sp .8s linear infinite;vertical-align:-1px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.spin{animation-duration:3s}}
+.mini{white-space:nowrap;flex:none;border:1px solid var(--green);color:var(--green);background:transparent;border-radius:8px;padding:2px 10px;font-size:12.5px;font-weight:700}
+/* banners */
+.note{margin:12px 16px 0;padding:12px 14px;border-radius:12px;background:var(--sheet);border:1px solid var(--rule);font-size:14px}
+.note.warn{border-color:transparent;background:var(--amber-soft);color:var(--ink)}
+.note .acts{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+.btn{white-space:nowrap;border:0;border-radius:10px;padding:9px 14px;font-weight:700;font-size:14px;background:var(--green);color:#fff}
+.btn.ghost{background:transparent;color:var(--green);border:1px solid var(--rule)}
+.btn.red{background:transparent;color:var(--red);border:1px solid var(--rule)}
+.btn.small{padding:6px 11px;font-size:13px}
+.btn:disabled{opacity:.5}
+.empty{padding:48px 28px;text-align:center;color:var(--muted)}
+.empty b{display:block;color:var(--ink);font-size:16px;margin-bottom:6px}
+/* setup checklist */
+.setup{margin:12px 16px 0;background:var(--sheet);border:1px solid var(--rule);border-radius:14px;overflow:hidden}
+.setup h3{margin:0;padding:14px 16px 4px;font-size:16px}
+.setup p.sub{margin:0;padding:0 16px 8px;color:var(--muted);font-size:13.5px}
+.step{display:flex;gap:12px;align-items:center;padding:11px 16px;border-top:1px solid var(--rule2)}
+.step .n{flex:none;width:24px;height:24px;border-radius:12px;border:1.5px solid var(--rule);display:grid;place-items:center;font-size:12.5px;font-weight:700;color:var(--muted)}
+.step.ok .n{background:var(--green);border-color:var(--green);color:#fff}
+.step .t{flex:1;font-size:14.5px}
+.step.ok .t{color:var(--muted)}
+/* sheets / pages */
+.page{position:fixed;inset:0;background:var(--paper);z-index:20;display:flex;flex-direction:column}
+.page.anim{animation:slide .18s ease-out}
+@keyframes slide{from{transform:translateX(24px);opacity:.4}}
+@media (prefers-reduced-motion: reduce){.page.anim{animation:none}}
+.page .bar{display:flex;align-items:center;gap:4px;padding:8px 8px 8px 4px;background:var(--paper)}
+.page .bar .grow{flex:1}
+.page .body{flex:1;overflow-y:auto;padding-bottom:40px}
+.dhead{padding:4px 18px 14px}
+.dhead .who{display:flex;align-items:center;gap:12px}
+.dhead .who .ava{width:46px;height:46px;font-size:18px}
+.dhead .nm{font-size:20px;font-weight:800;line-height:1.25}
+.dhead .sub{font-size:13px;color:var(--muted)}
+.dtitle{padding:0 18px;font-size:22px;font-weight:800;line-height:1.35;letter-spacing:-.02em}
+.stamprow{padding:10px 18px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* the one bold thing: category as a seal stamp */
+.stamp{display:inline-grid;place-items:center;min-width:46px;height:46px;padding:0 6px;border:2.5px solid currentColor;border-radius:10px;
+  font-weight:900;font-size:15px;letter-spacing:.04em;transform:rotate(-6deg);color:var(--green);opacity:.92}
+.stamp.red{color:var(--red)} .stamp.amber{color:var(--amber)} .stamp.grey{color:var(--muted)}
+.player{margin:16px 16px 0;background:var(--sheet);border:1px solid var(--rule);border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+.player .pp{width:42px;height:42px;border-radius:21px;border:0;background:var(--ink);color:var(--paper);display:grid;place-items:center;flex:none}
+.player .pp svg{width:20px;height:20px}
+.player input[type=range]{flex:1;accent-color:var(--green)}
+.player .tm{font-size:12px;color:var(--muted);min-width:76px;text-align:right}
+.player .sp{border:1px solid var(--rule);background:transparent;border-radius:8px;font-size:12px;padding:3px 7px;font-weight:700}
+.tabs{display:flex;gap:4px;margin:16px 16px 0;border-bottom:1px solid var(--rule)}
+.tabs button{border:0;background:transparent;padding:9px 12px;font-weight:700;color:var(--faint);border-bottom:2.5px solid transparent;margin-bottom:-1px}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--ink)}
+.sec{padding:14px 18px 0}
+.sec h4{margin:10px 0 8px;font-size:13.5px;color:var(--muted);font-weight:700}
+ul.sum{margin:0;padding:0;list-style:none}
+ul.sum li{position:relative;padding:0 0 9px 16px;font-size:15.5px;line-height:1.6}
+ul.sum li:before{content:"";position:absolute;left:2px;top:.72em;width:6px;height:6px;border-radius:2px;background:var(--green)}
+.act{display:flex;gap:10px;padding:11px 0;border-top:1px solid var(--rule2);align-items:flex-start}
+.act:first-of-type{border-top:0}
+.chk{flex:none;width:24px;height:24px;border-radius:7px;border:2px solid var(--faint);background:transparent;display:grid;place-items:center;margin-top:1px;padding:0}
+.chk.on{background:var(--green);border-color:var(--green)}
+.chk svg{width:15px;height:15px;color:#fff}
+.act .am{flex:1;min-width:0}
+.act .at{font-size:15px;font-weight:600}
+.act.done .at{text-decoration:line-through;color:var(--faint)}
+.act .ad{font-size:12.5px;color:var(--muted);margin-top:1px}
+.act .ad.late{color:var(--red);font-weight:700}
+.act .ab{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+.reg{border:1px solid var(--rule);background:transparent;border-radius:8px;padding:4px 9px;font-size:12.5px;font-weight:600;display:inline-flex;gap:4px;align-items:center;color:var(--ink)}
+.reg svg{width:14px;height:14px}
+.reg.ok{border-color:transparent;background:var(--green-soft);color:var(--green)}
+.kw{display:flex;gap:6px;flex-wrap:wrap}
+.talk{padding:12px 14px 0;display:flex;flex-direction:column;gap:8px}
+.bub{max-width:84%;padding:9px 13px;border-radius:16px;font-size:15px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.bub.them{align-self:flex-start;background:var(--sheet);border:1px solid var(--rule);border-bottom-left-radius:5px}
+.bub.me{align-self:flex-end;background:var(--green-soft);border-bottom-right-radius:5px}
+.who-l{font-size:11.5px;color:var(--faint);margin:4px 4px -4px}
+.who-l.me{align-self:flex-end}
+mark{background:var(--amber-soft);color:inherit;border-radius:3px;padding:0 1px}
+textarea.memo{width:100%;min-height:200px;border:1px solid var(--rule);border-radius:12px;background:var(--sheet);padding:12px;resize:vertical;line-height:1.6;outline:none}
+textarea.memo:focus,.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--green)}
+.dfoot{display:flex;gap:8px;flex-wrap:wrap;padding:22px 18px 0}
+/* todo */
+.tgroup{padding:16px 16px 6px;font-size:13px;font-weight:800;color:var(--muted)}
+.tgroup.late{color:var(--red)}
+.titem{background:var(--sheet);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:0 16px}
+.titem .act{border-top:1px solid var(--rule2)}
+.titem .act:first-child{border-top:0}
+.src{font-size:12.5px;color:var(--green);font-weight:600;background:transparent;border:0;padding:0}
+/* chat */
+.chatwrap{display:flex;flex-direction:column;height:100%}
+.chatlog{flex:1;overflow-y:auto;padding:8px 14px 16px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:88%;padding:10px 14px;border-radius:16px;white-space:pre-wrap;word-break:break-word;line-height:1.6;font-size:15px}
+.msg.user{align-self:flex-end;background:var(--ink);color:var(--paper);border-bottom-right-radius:5px}
+.msg.model{align-self:flex-start;background:var(--sheet);border:1px solid var(--rule);border-bottom-left-radius:5px}
+.msg.err{border-color:var(--red);color:var(--red)}
+.refs{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.ref{border:1px solid var(--rule);background:var(--paper);border-radius:8px;padding:3px 8px;font-size:12.5px;color:var(--green);font-weight:600}
+.composer{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--rule);background:var(--sheet);align-items:flex-end}
+.composer textarea{flex:1;border:1px solid var(--rule);border-radius:14px;padding:10px 12px;max-height:120px;min-height:44px;resize:none;background:var(--paper);outline:none;line-height:1.45}
+.composer button{flex:none;width:44px;height:44px;border-radius:22px;border:0;background:var(--green);color:#fff;display:grid;place-items:center}
+.composer button svg{width:20px;height:20px}
+.sugg{display:flex;flex-direction:column;gap:8px;padding:6px 2px}
+.sugg button{text-align:left;border:1px solid var(--rule);background:var(--sheet);border-radius:12px;padding:11px 14px;font-size:14.5px}
+.intro{color:var(--muted);font-size:14px;padding:10px 4px 4px;line-height:1.6}
+/* settings */
+.group{margin:18px 16px 0}
+.group > h3{margin:0 0 8px 2px;font-size:13.5px;color:var(--muted)}
+.box{background:var(--sheet);border:1px solid var(--rule);border-radius:14px;overflow:hidden}
+.srow{display:flex;align-items:center;gap:12px;padding:13px 14px;border-top:1px solid var(--rule2)}
+.srow:first-child{border-top:0}
+.srow .l{flex:1;min-width:0}
+.srow .l b{display:block;font-weight:600;font-size:15px}
+.srow .l small{display:block;color:var(--muted);font-size:12.5px;line-height:1.45;margin-top:1px}
+.ok-t{color:var(--green);font-weight:700;font-size:13.5px}
+.toggle{position:relative;width:46px;height:28px;flex:none}
+.toggle input{opacity:0;position:absolute;inset:0;margin:0}
+.toggle span{position:absolute;inset:0;border-radius:14px;background:var(--rule);transition:background .15s}
+.toggle span:after{content:"";position:absolute;width:22px;height:22px;top:3px;left:3px;border-radius:11px;background:#fff;transition:transform .15s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.toggle input:checked + span{background:var(--green)}
+.toggle input:checked + span:after{transform:translateX(18px)}
+.toggle input:focus-visible + span{outline:2px solid var(--green);outline-offset:2px}
+.field{padding:12px 14px;border-top:1px solid var(--rule2)}
+.field:first-child{border-top:0}
+.field label{display:block;font-weight:600;font-size:14px;margin-bottom:6px}
+.field input,.field textarea,.field select{width:100%;border:1px solid var(--rule);border-radius:10px;background:var(--paper);padding:10px 12px;outline:none}
+.field small{display:block;color:var(--muted);font-size:12.5px;margin-top:6px;line-height:1.5}
+.field .inl{display:flex;gap:8px}
+.field .inl input{flex:1}
+.link{color:var(--green);font-weight:700;background:none;border:0;padding:0;text-decoration:underline;text-underline-offset:3px}
+/* dialog */
+.scrim{position:fixed;inset:0;background:rgba(10,20,16,.42);z-index:40;display:flex;align-items:flex-end}
+.dlg{width:100%;background:var(--sheet);border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));max-height:88%;overflow-y:auto;box-shadow:var(--shadow);animation:up .18s ease-out}
+@keyframes up{from{transform:translateY(30px);opacity:.5}}
+@media (prefers-reduced-motion: reduce){.dlg{animation:none}}
+.dlg h3{margin:0 0 12px;font-size:18px}
+.dlg .field{padding:8px 0;border:0}
+.dlg .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.seg{display:flex;border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.seg button{flex:1;border:0;background:transparent;padding:8px 0;font-weight:600;color:var(--muted)}
+.seg button.on{background:var(--ink);color:var(--paper)}
+.guide ol{margin:6px 0 0;padding-left:20px;line-height:1.75}
+#toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:12px;font-size:14px;z-index:60;max-width:88%;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.contacthead{padding:4px 18px 0}
+.statline{display:flex;gap:18px;padding:12px 18px 0;color:var(--muted);font-size:13px}
+.statline b{display:block;font-size:20px;color:var(--ink)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="view"></div>
+  <nav id="nav"></nav>
+</div>
+<div id="layer"></div>
+<div id="toast"></div>
+<script>
+"use strict";
+// ---------------------------------------------------------------- native bridge
+const N = window.Biseo;
+const pending = {}; let seq = 0;
+function nreq(fn, ...args){
+  return new Promise(res => {
+    const id = 'r' + (++seq); pending[id] = res;
+    try { N[fn](id, ...args); } catch(e){ delete pending[id]; res({status:-3, body:String(e)}); }
+  });
+}
+window.__native = {
+  resolve(id, status, body){ const r = pending[id]; if (r){ delete pending[id]; r({status, body}); } },
+  callsChanged(){ clearTimeout(reloadT); reloadT = setTimeout(reloadCalls, 120); },
+  toast(m){ toast(m); },
+  permsChanged(){ render(); },
+  openCall(id){ reloadCalls(); openCall(id); },
+  launch(){ const id = N.takeLaunch(); if (id){ reloadCalls(); openCall(id); } },
+  resumed(){ refresh(false); },
+  tasksChanged(){ S.set = JSON.parse(N.settings()); render(); }
+};
+let reloadT = 0;
+
+// ---------------------------------------------------------------- state
+const S = {
+  calls: [], byId: {}, data: {contacts:{}, chat:[]}, set: {},
+  tab: 'calls', q: '', filter: 'all', todoMine: true, page: null, // page: {kind:'call'|'contact', id, sub}
+  chatBusy: false, setupHidden: false
+};
+function loadAll(){
+  try { S.data = Object.assign({contacts:{}, chat:[]}, JSON.parse(N.loadData() || '{}')); } catch(e){}
+  S.set = JSON.parse(N.settings());
+  reloadCalls(true);
+}
+function reloadCalls(silent){
+  try { S.calls = JSON.parse(N.calls() || '[]'); } catch(e){ S.calls = []; }
+  S.calls.sort((a,b) => (b.ts||0) - (a.ts||0));
+  S.byId = {}; S.calls.forEach(c => S.byId[c.id] = c);
+  if (!silent) render();
+}
+let saveT = 0;
+function saveData(){ clearTimeout(saveT); saveT = setTimeout(() => N.saveData(JSON.stringify(S.data)), 250); }
+function patch(id, fields){
+  const c = S.byId[id]; if (c) Object.assign(c, fields);
+  N.patchCall(id, JSON.stringify(fields));
+}
+async function refresh(showToast){
+  const r = await nreq('refresh');
+  if (showToast){ const n = +r.body || 0; toast(n ? `새 통화 녹음 ${n}개를 찾았어요` : '새 통화 녹음이 없어요'); }
+}
+
+// ---------------------------------------------------------------- helpers
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = s => document.querySelector(s);
+const WD = ['일','월','화','수','목','금','토'];
+const pad = n => String(n).padStart(2,'0');
+function ymd(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function today(){ return ymd(new Date()); }
+function addDays(s, n){ const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate()+n); return ymd(d); }
+function dayLabel(ts){
+  const d = new Date(ts), t = today(), k = ymd(d);
+  if (k === t) return '오늘';
+  if (k === addDays(t,-1)) return '어제';
+  const y = d.getFullYear() !== new Date().getFullYear() ? d.getFullYear() + '년 ' : '';
+  return `${y}${d.getMonth()+1}월 ${d.getDate()}일 (${WD[d.getDay()]})`;
+}
+function timeLabel(ts){
+  const d = new Date(ts); let h = d.getHours(); const ap = h < 12 ? '오전' : '오후'; h = h % 12 || 12;
+  return `${ap} ${h}:${pad(d.getMinutes())}`;
+}
+function shortWhen(ts){
+  const k = ymd(new Date(ts));
+  if (k === today()) return timeLabel(ts);
+  const d = new Date(ts); return `${d.getMonth()+1}/${d.getDate()}`;
+}
+function durLabel(sec){
+  sec = Math.round(sec || 0); if (!sec) return '';
+  const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60;
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+function msLabel(ms){ return durLabel(ms/1000) || '0:00'; }
+function dateLabel(s, time){
+  if (!s) return time ? time : '날짜 미정';
+  const t = today(); let base;
+  if (s === t) base = '오늘'; else if (s === addDays(t,1)) base = '내일'; else if (s === addDays(t,-1)) base = '어제';
+  else { const d = new Date(s + 'T00:00:00'); if (isNaN(d)) return s; base = `${d.getMonth()+1}월 ${d.getDate()}일 (${WD[d.getDay()]})`; }
+  if (time){ const [h, m] = time.split(':').map(Number); base += ` ${h < 12 ? '오전' : '오후'} ${(h%12)||12}:${pad(m||0)}`; }
+  return base;
+}
+const AVA = ['#1F6B55','#2F5D8A','#8A4B2F','#6A4C93','#2E7D7A','#9A3B4F','#5C6B2E','#3E4A9A'];
+function avaColor(name){ let h = 0; for (const ch of String(name)) h = (h*31 + ch.charCodeAt(0)) >>> 0; return AVA[h % AVA.length]; }
+function ava(name){ const ch = String(name||'?').replace(/[^0-9A-Za-z가-힣]/g,'').charAt(0) || '?'; return `<div class="ava" style="background:${avaColor(name)}">${esc(/\d/.test(ch) ? '☎' : ch)}</div>`; }
+const CAT_TONE = {'클레임':'red','수금':'amber','견적':'green','주문':'green','납품':'green','상담':'green','일정':'green','내부':'grey','개인':'grey','기타':'grey'};
+function companyOf(name){
+  const meta = S.data.contacts[name]; if (meta && meta.company) return meta.company;
+  const c = S.calls.find(x => x.contact === name && x.company); return c ? c.company : '';
+}
+function myActs(c){ return (c.actions||[]).filter(a => a.owner !== '상대'); }
+function openActs(c){ return myActs(c).filter(a => !a.done); }
+let toastT = 0;
+function toast(m){ const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2600); }
+
+const I = {
+  calls:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h11a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H9l-4 3v-3.2A3 3 0 0 1 2 14V8"/><path d="M7 9v3M10 8v5M13 9v3"/></svg>',
+  people:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V5a2 2 0 0 1 2-2h9l4 4v14"/><path d="M7 8h5M7 12h7M7 16h7"/><path d="M14 3v4h4"/><path d="M21 21H3"/></svg>',
+  todo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M7.5 13l3 3 6-6"/></svg>',
+  chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.6L12 15l-1.8-4.4L5.5 9l4.7-1.4z"/><path d="M18.5 15l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9zM5 16l.6 1.4L7 18l-1.4.6L5 20l-.6-1.4L3 18l1.4-.6z"/></svg>',
+  set:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+  refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
+  play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>',
+  pause:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4.5" width="4" height="15" rx="1"/><rect x="14" y="4.5" width="4" height="15" rx="1"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  star:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></svg>',
+  starOn:'<svg viewBox="0 0 24 24" fill="#E0A743" stroke="#E0A743" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></svg>',
+  more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>',
+  send:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>',
+  task:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+};
+
+// ---------------------------------------------------------------- render root
+function render(){
+  renderNav();
+  const v = $('#view');
+  const keep = v.scrollTop;
+  if (S.tab === 'calls') v.innerHTML = viewCalls();
+  else if (S.tab === 'people') v.innerHTML = viewPeople();
+  else if (S.tab === 'todo') v.innerHTML = viewTodo();
+  else if (S.tab === 'chat') v.innerHTML = viewChat();
+  else v.innerHTML = viewSettings();
+  v.scrollTop = keep;
+  if (S.tab === 'chat') scrollChat();
+  renderPage();
+}
+function renderNav(){
+  const late = S.calls.reduce((n, c) => n + openActs(c).filter(a => a.date && a.date <= today()).length, 0);
+  const items = [['calls','통화',I.calls],['people','거래처',I.people],['todo','할 일',I.todo],['chat','비서',I.chat],['set','설정',I.set]];
+  $('#nav').innerHTML = items.map(([k,l,ic]) =>
+    `<button data-act="tab" data-k="${k}" class="${S.tab===k?'on':''}" aria-label="${l}">${ic}<span>${l}</span>${k==='todo'&&late?`<span class="dot">${late}</span>`:''}</button>`).join('');
+}
+
+// ---------------------------------------------------------------- calls tab
+function setupSteps(){
+  const p = JSON.parse(N.perms());
+  return [
+    {k:'rec', t:'갤럭시 전화 앱에서 통화 자동 녹음 켜기', ok: S.calls.length > 0 || S.data.recGuideSeen, btn:'방법 보기', act:'guide'},
+    {k:'audio', t:'통화 녹음 파일 읽기 허용', ok: p.audio, btn:'허용', act:'perm', perm:'audio'},
+    {k:'key', t:'Gemini API 키 넣기 (요약에 필요)', ok: !!S.set.apiKey, btn:'넣기', act:'tab', tab:'set'},
+    {k:'cal', t:'캘린더 쓰기 허용 (일정 등록용)', ok: p.calendar, btn:'허용', act:'perm', perm:'calendar'},
+  ];
+}
+function viewCalls(){
+  const st = JSON.parse(N.workState());
+  let h = `<div class="top"><div class="row"><h1>통화</h1>
+    <button class="iconbtn" data-act="refresh" aria-label="새 녹음 찾기">${I.refresh}</button></div>
+    <div class="search">${I.search}<input id="q" placeholder="이름, 회사, 내용으로 찾기" value="${esc(S.q)}" autocomplete="off"></div></div>`;
+  const steps = setupSteps();
+  if (!S.data.setupDone && steps.some(s => !s.ok)){
+    h += `<div class="setup"><h3>시작하기</h3><p class="sub">통화가 끝나면 녹음을 알아서 받아쓰고 요약해 드려요. 아래만 해 두면 돼요.</p>` +
+      steps.map((s,i) => `<div class="step ${s.ok?'ok':''}"><div class="n">${s.ok?'✓':i+1}</div><div class="t">${esc(s.t)}</div>
+        ${s.ok?'':`<button class="mini" data-act="${s.act}" data-perm="${s.perm||''}" data-k="${s.tab||''}">${s.btn}</button>`}</div>`).join('') +
+      `</div>`;
+    if (steps.every(s => s.ok)) { S.data.setupDone = true; saveData(); }
+  }
+  // status banners
+  const queued = S.calls.filter(c => c.status === 'queued').length;
+  if (queued && st.block === 'nokey') h += `<div class="note warn">요약을 기다리는 통화가 ${queued}개 있어요. 설정에서 Gemini API 키를 넣으면 바로 시작해요.<div class="acts"><button class="btn small" data-act="tab" data-k="set">API 키 넣기</button></div></div>`;
+  else if (queued && st.block === 'offline') h += `<div class="note warn">인터넷이 연결되면 통화 ${queued}개를 요약할게요.</div>`;
+  else if (queued && st.block === 'wifi') h += `<div class="note warn">와이파이에 연결되면 통화 ${queued}개를 요약할게요. (설정에서 바꿀 수 있어요)</div>`;
+  const fresh = S.calls.filter(c => c.status === 'new' && c.ts > Date.now() - 7*864e5);
+  if (fresh.length && S.set.apiKey) h += `<div class="note">아직 요약하지 않은 최근 7일 통화가 ${fresh.length}개 있어요.<div class="acts"><button class="btn small" data-act="queueRecent">모두 요약하기</button></div></div>`;
+
+  const filters = [['all','전체'],['todo','할 일 있음'],['new','요약 안 됨'],['star','중요']];
+  h += `<div class="chips">` + filters.map(([k,l]) => `<button class="chip ${S.filter===k?'on':''}" data-act="filter" data-k="${k}">${l}</button>`).join('') + `</div>`;
+
+  const list = filterCalls();
+  if (!S.calls.length){
+    h += `<div class="empty"><b>아직 통화 녹음이 없어요</b>갤럭시 자동 녹음을 켜 두면, 통화가 끝날 때마다 여기에 쌓여요.<br><br>
+      <button class="btn ghost" data-act="pickAudio">녹음 파일 직접 추가</button></div>`;
+    return h;
+  }
+  if (!list.length) return h + `<div class="empty"><b>찾는 통화가 없어요</b>다른 말로 찾아보세요.</div>`;
+  let lastDay = '';
+  let open = false;
+  for (const c of list.slice(0, 300)){
+    const dl = dayLabel(c.ts);
+    if (dl !== lastDay){ if (open) h += `</div>`; h += `<div class="dayhead">${dl}</div><div class="ledger">`; open = true; lastDay = dl; }
+    h += callRow(c, st);
+  }
+  if (open) h += `</div>`;
+  if (list.length > 300) h += `<div class="empty">최근 300개만 보여요. 검색으로 찾아보세요.</div>`;
+  return h;
+}
+function filterCalls(){
+  const q = S.q.trim().toLowerCase();
+  return S.calls.filter(c => {
+    if (S.filter === 'todo' && !openActs(c).length) return false;
+    if (S.filter === 'new' && c.status === 'done') return false;
+    if (S.filter === 'star' && !c.star) return false;
+    if (!q) return true;
+    return searchText(c).includes(q);
+  });
+}
+function searchText(c){
+  if (!c._s){
+    c._s = [c.contact, c.number, c.company, c.counterpart, c.title, c.memo, c.category,
+      ...(c.summary||[]), ...(c.keywords||[]), ...(c.transcript||[]).map(t => t.t), ...(c.actions||[]).map(a => a.title)]
+      .join(' ').toLowerCase();
+  }
+  return c._s;
+}
+function statusHtml(c){
+  if (c.status === 'working') return `<div class="state"><span class="spin"></span> 받아쓰고 요약하는 중…</div>`;
+  if (c.status === 'queued') return `<div class="state">요약 대기 중</div>`;
+  if (c.status === 'error') return `<div class="state err">${esc(c.error || '요약하지 못했어요')}</div>`;
+  if (c.status === 'new') return `<div class="state">요약 전</div>`;
+  return '';
+}
+function callRow(c){
+  const comp = c.company || companyOf(c.contact);
+  const acts = openActs(c);
+  let body = c.status === 'done' ? `<div class="ctitle">${esc(c.title || (c.summary||[])[0] || '')}</div>` : statusHtml(c);
+  let meta = '';
+  if (c.status === 'done'){
+    const tone = CAT_TONE[c.category] || 'grey';
+    meta = `<div class="cmeta">${c.category ? `<span class="tag ${tone==='grey'?'':tone}">${esc(c.category)}</span>` : ''}
+      ${acts.length ? `<span class="tag amber">할 일 ${acts.length}</span>` : ''}
+      ${c.star ? '<span class="tag amber">중요</span>' : ''}<span class="num">${durLabel(c.dur)}</span></div>`;
+  } else if (c.status === 'new' || c.status === 'error'){
+    meta = `<div class="cmeta"><button class="mini" data-act="queue" data-id="${esc(c.id)}">${c.status==='error'?'다시 요약':'요약하기'}</button><span class="num">${durLabel(c.dur)}</span></div>`;
+  }
+  return `<div class="crow" role="button" tabindex="0" data-act="open" data-id="${esc(c.id)}">${ava(c.contact)}
+    <div class="cmain"><div class="cline1"><span class="cname">${esc(c.contact)}</span><span class="ccomp">${esc(comp)}</span><span class="ctime num">${timeLabel(c.ts)}</span></div>
+    ${body}${meta}</div></div>`;
+}
+
+// ---------------------------------------------------------------- call detail page
+let audioTimer = 0;
+function openCall(id){
+  if (!S.byId[id]) return;
+  stopAudioTimer();
+  S.page = {kind:'call', id, sub:'sum', back: S.page && S.page.kind === 'contact' ? S.page : null};
+  renderPage(true);
+}
+function renderPage(fresh){
+  const layer = $('#layer');
+  if (!S.page){ layer.innerHTML = ''; return; }
+  // don't wipe text the user is typing
+  const ae = document.activeElement;
+  if (!fresh && ae && layer.contains(ae) && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT')) return;
+  const html = S.page.kind === 'call' ? pageCall() : pageContact();
+  const old = layer.querySelector('.page .body');
+  const keep = fresh ? 0 : (old ? old.scrollTop : 0);
+  layer.innerHTML = fresh ? html.replace('<div class="page">','<div class="page anim">') : html;
+  const nb = layer.querySelector('.page .body'); if (nb) nb.scrollTop = keep;
+  if (S.page.kind === 'call') { syncPlayer(); }
+}
+function pageCall(){
+  const c = S.byId[S.page.id];
+  if (!c) { S.page = null; return ''; }
+  const comp = c.company || companyOf(c.contact);
+  const sub = S.page.sub;
+  let h = `<div class="page"><div class="bar"><button class="iconbtn" data-act="back" aria-label="뒤로">${I.back}</button><div class="grow"></div>
+    <button class="iconbtn" data-act="star" aria-label="중요 표시">${c.star ? I.starOn : I.star}</button>
+    <button class="iconbtn" data-act="callMenu" aria-label="더 보기">${I.more}</button></div><div class="body">`;
+  h += `<div class="dhead"><div class="who" data-act="openContact" data-name="${esc(c.contact)}" role="button" tabindex="0">${ava(c.contact)}<div><div class="nm">${esc(c.contact)}</div>
+    ${(() => { const cp = c.counterpart && c.counterpart !== c.contact ? c.counterpart : ''; const x = [comp, cp].filter(Boolean).join(', '); return `<div class="sub">${esc(x)}${x?'<br>':''}`; })()}${dayLabel(c.ts)} ${timeLabel(c.ts)}, <span class="num">${durLabel(c.dur) || '길이 모름'}</span></div></div></div></div>`;
+  if (c.status === 'done'){
+    h += `<div class="dtitle">${esc(c.title)}</div>`;
+    const tone = CAT_TONE[c.category] || 'grey';
+    h += `<div class="stamprow">${c.category ? `<span class="stamp ${tone==='green'?'':tone}">${esc(c.category)}</span>` : ''}
+      ${c.mood ? `<span class="tag ${c.mood==='긍정'?'green':c.mood==='부정'?'red':''}">상대 반응 ${esc(c.mood)}</span>` : ''}</div>`;
+  } else {
+    h += `<div class="sec">${statusHtml(c)}${c.status==='new'||c.status==='error' ? `<div style="margin-top:10px"><button class="btn" data-act="queue" data-id="${esc(c.id)}">${c.status==='error'?'다시 요약하기':'지금 요약하기'}</button></div>`:''}</div>`;
+  }
+  if (!c.gone) h += `<div class="player"><button class="pp" data-act="play" aria-label="재생">${I.play}</button>
+    <input type="range" id="seek" min="0" max="${Math.max(1,(c.dur||0)*1000)}" value="0" aria-label="재생 위치">
+    <span class="tm num" id="ptime">0:00 / ${durLabel(c.dur)||'0:00'}</span><button class="sp" data-act="speed" id="pspeed">1x</button></div>`;
+  else h += `<div class="note">녹음 파일이 휴대폰에서 지워져서 다시 들을 수는 없어요. 요약은 남아 있어요.</div>`;
+
+  if (c.status === 'done' || c.memo){
+    h += `<div class="tabs" role="tablist">${[['sum','요약'],['talk','대화'],['memo','메모']].map(([k,l]) =>
+      `<button role="tab" data-act="sub" data-k="${k}" class="${sub===k?'on':''}">${l}</button>`).join('')}</div>`;
+  } else if (sub !== 'memo') S.page.sub = 'memo';
+  const s2 = S.page.sub;
+  if (s2 === 'sum' && c.status === 'done'){
+    h += `<div class="sec"><ul class="sum">${(c.summary||[]).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
+    const acts = c.actions || [];
+    h += `<div class="sec"><h4>할 일·약속</h4>${acts.length ? acts.map(a => actHtml(c, a, false)).join('') : '<div class="state">통화에서 나온 할 일이 없어요.</div>'}
+      <div style="margin-top:8px"><button class="btn ghost small" data-act="addAct" data-id="${esc(c.id)}">할 일 직접 추가</button></div></div>`;
+    if ((c.keywords||[]).length) h += `<div class="sec"><h4>키워드</h4><div class="kw">${c.keywords.map(k => `<span class="tag">${esc(k)}</span>`).join('')}</div></div>`;
+    h += `<div class="dfoot"><button class="btn ghost" data-act="shareSum">요약 보내기</button><button class="btn ghost" data-act="copySum">복사</button></div>`;
+  } else if (s2 === 'talk' && c.status === 'done'){
+    const q = S.q.trim();
+    const hl = t => { let x = esc(t); if (q.length > 1){ const re = new RegExp(esc(q).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'); x = x.replace(re, m => `<mark>${m}</mark>`);} return x; };
+    let prev = '';
+    h += `<div class="talk">` + (c.transcript||[]).map(t => {
+      const me = t.s === '나'; const lab = prev !== t.s ? `<div class="who-l ${me?'me':''}">${me ? '나' : esc(c.contact)}</div>` : ''; prev = t.s;
+      return lab + `<div class="bub ${me?'me':'them'}">${hl(t.t)}</div>`;
+    }).join('') + `</div>`;
+    if (!(c.transcript||[]).length) h += `<div class="sec state">받아쓴 내용이 없어요.</div>`;
+  } else {
+    h += `<div class="sec"><textarea class="memo" id="memo" placeholder="이 통화에 대한 메모">${esc(c.memo||'')}</textarea></div>`;
+  }
+  h += `</div></div>`;
+  return h;
+}
+function actHtml(c, a, showSrc){
+  const late = !a.done && a.date && a.date < today();
+  const sent = a.sent || {};
+  const who = a.owner && a.owner !== '나' ? ` (${esc(a.owner)})` : '';
+  return `<div class="act ${a.done?'done':''}">
+    <button class="chk ${a.done?'on':''}" data-act="toggleAct" data-id="${esc(c.id)}" data-a="${esc(a.id)}" aria-label="완료">${a.done?I.check:''}</button>
+    <div class="am"><div class="at" data-act="editAct" data-id="${esc(c.id)}" data-a="${esc(a.id)}" role="button" tabindex="0">${esc(a.title)}${who}</div>
+      <div class="ad ${late?'late':''}">${a.type==='event'?'약속':'할 일'}, ${esc(dateLabel(a.date, a.time))}</div>${a.note?`<div class="ad">${esc(a.note)}</div>`:''}
+      ${showSrc ? `<button class="src" data-act="open" data-id="${esc(c.id)}">${esc(c.contact)} 통화 ${shortWhen(c.ts)}</button>` : ''}
+      <div class="ab">
+        ${sent.cal ? `<button class="reg ok" data-act="openEvent" data-ev="${esc(sent.cal)}">${I.cal}캘린더에 있음</button>`
+                   : `<button class="reg" data-act="toCal" data-id="${esc(c.id)}" data-a="${esc(a.id)}">${I.cal}캘린더</button>`}
+        ${sent.task ? `<span class="reg ok">${I.task}구글 할 일에 있음</span>`
+                    : `<button class="reg" data-act="toTask" data-id="${esc(c.id)}" data-a="${esc(a.id)}">${I.task}구글 할 일</button>`}
+      </div></div></div>`;
+}
+function summaryText(c){
+  const lines = [`[${c.contact}${c.company?` / ${c.company}`:''}] ${dayLabel(c.ts)} ${timeLabel(c.ts)} 통화`, c.title ? `■ ${c.title}` : ''];
+  (c.summary||[]).forEach(s => lines.push(`- ${s}`));
+  const acts = (c.actions||[]).filter(a => !a.done);
+  if (acts.length){ lines.push('', '할 일·약속'); acts.forEach(a => lines.push(`- ${a.title} (${dateLabel(a.date, a.time)})`)); }
+  return lines.filter((l,i) => l !== '' || i > 1).join('\n');
+}
+
+// ---------------------------------------------------------------- audio
+function syncPlayer(){
+  const c = S.byId[S.page && S.page.id]; if (!c) return;
+  const st = JSON.parse(N.audioState());
+  const mine = st.uri === c.uri;
+  const pp = $('#layer .pp'); if (!pp) return;
+  pp.innerHTML = mine && st.playing ? I.pause : I.play;
+  if (mine){
+    const seek = $('#seek'); if (seek && !seek.dataset.drag){ seek.max = st.dur || seek.max; seek.value = st.pos; }
+    $('#ptime').textContent = `${msLabel(st.pos)} / ${msLabel(st.dur)}`;
+    $('#pspeed').textContent = (st.speed || 1) + 'x';
+  }
+  if (mine && st.playing && !audioTimer) audioTimer = setInterval(syncPlayer, 400);
+  if (!(mine && st.playing)) stopAudioTimer();
+}
+function stopAudioTimer(){ clearInterval(audioTimer); audioTimer = 0; }
+
+// ---------------------------------------------------------------- contacts
+function contactGroups(){
+  const g = {};
+  for (const c of S.calls){
+    const k = c.contact || '알 수 없음';
+    (g[k] = g[k] || {name:k, calls:[], open:0, last:0});
+    g[k].calls.push(c); g[k].open += openActs(c).length; g[k].last = Math.max(g[k].last, c.ts||0);
+  }
+  return Object.values(g).sort((a,b) => b.last - a.last);
+}
+function viewPeople(){
+  let h = `<div class="top"><h1>거래처</h1><div class="search">${I.search}<input id="pq" placeholder="거래처 찾기" value="${esc(S.pq||'')}" autocomplete="off"></div></div>`;
+  const q = (S.pq||'').trim().toLowerCase();
+  const groups = contactGroups().filter(g => !q || (g.name + ' ' + companyOf(g.name)).toLowerCase().includes(q));
+  if (!groups.length) return h + `<div class="empty"><b>${q?'찾는 거래처가 없어요':'아직 거래처가 없어요'}</b>${q?'':'통화를 하면 상대별로 여기에 모여요.'}</div>`;
+  h += `<div class="ledger" style="margin-top:6px">` + groups.map(g => {
+    const comp = companyOf(g.name);
+    return `<div class="crow" role="button" tabindex="0" data-act="openContact" data-name="${esc(g.name)}">${ava(g.name)}<div class="cmain">
+      <div class="cline1"><span class="cname">${esc(g.name)}</span><span class="ccomp">${esc(comp)}</span><span class="ctime num">${shortWhen(g.last)}</span></div>
+      <div class="cmeta"><span>통화 ${g.calls.length}번</span>${g.open?`<span class="tag amber">할 일 ${g.open}</span>`:''}</div></div></div>`;
+  }).join('') + `</div>`;
+  return h;
+}
+function openContact(name){
+  stopAudioTimer();
+  S.page = {kind:'contact', name};
+  renderPage(true);
+}
+function pageContact(){
+  const name = S.page.name;
+  const calls = S.calls.filter(c => c.contact === name);
+  const meta = S.data.contacts[name] || {};
+  const comp = companyOf(name);
+  const acts = [];
+  calls.forEach(c => openActs(c).forEach(a => acts.push([c,a])));
+  acts.sort((x,y) => (x[1].date||'9') < (y[1].date||'9') ? -1 : 1);
+  const total = calls.reduce((n,c) => n + (c.dur||0), 0);
+  let h = `<div class="page"><div class="bar"><button class="iconbtn" data-act="back" aria-label="뒤로">${I.back}</button><div class="grow"></div>
+    <button class="btn ghost small" data-act="renameContact">이름·회사 고치기</button></div><div class="body">
+    <div class="dhead"><div class="who">${ava(name)}<div><div class="nm">${esc(name)}</div><div class="sub">${esc(comp || '회사 정보 없음')}</div></div></div></div>
+    <div class="statline"><div><b class="num">${calls.length}</b>통화</div><div><b class="num">${Math.round(total/60)}분</b>통화 시간</div><div><b class="num">${acts.length}</b>남은 할 일</div></div>
+    <div class="sec"><button class="btn" data-act="brief" data-name="${esc(name)}">통화 전 브리핑 받기</button></div>
+    <div class="sec"><h4>거래처 메모</h4><textarea class="memo" id="cmemo" style="min-height:90px" placeholder="담당자, 단가 조건, 결제일 같은 기억할 것">${esc(meta.memo||'')}</textarea></div>`;
+  if (acts.length) h += `<div class="sec"><h4>남은 할 일·약속</h4>${acts.map(([c,a]) => actHtml(c,a,true)).join('')}</div>`;
+  h += `<div class="sec"><h4>통화 기록</h4></div><div class="ledger">${calls.map(c => callRow(c)).join('')}</div></div></div>`;
+  return h;
+}
+
+// ---------------------------------------------------------------- todo tab
+function viewTodo(){
+  let h = `<div class="top"><h1>할 일</h1></div>
+    <div style="padding:0 16px"><div class="seg"><button class="${S.todoMine?'on':''}" data-act="todoMine" data-k="1">내 할 일</button><button class="${!S.todoMine?'on':''}" data-act="todoMine" data-k="0">상대 할 일 포함</button></div></div>`;
+  const items = [];
+  for (const c of S.calls) for (const a of (c.actions||[])) if (!S.todoMine || a.owner !== '상대') items.push([c,a]);
+  if (!items.length) return h + `<div class="empty"><b>할 일이 없어요</b>통화에서 "보내 드릴게요", "화요일에 뵙죠" 같은 말이 나오면 여기에 정리돼요.</div>`;
+  const t = today(), tm = addDays(t,1);
+  const dow = new Date().getDay(); const weekEnd = addDays(t, 7 - (dow || 7));
+  const G = {late:[], today:[], tomorrow:[], week:[], later:[], none:[], done:[]};
+  for (const it of items){
+    const a = it[1];
+    if (a.done) G.done.push(it);
+    else if (!a.date) G.none.push(it);
+    else if (a.date < t) G.late.push(it);
+    else if (a.date === t) G.today.push(it);
+    else if (a.date === tm) G.tomorrow.push(it);
+    else if (a.date <= weekEnd) G.week.push(it);
+    else G.later.push(it);
+  }
+  const by = (x,y) => ((x[1].date||'') + (x[1].time||'99')) < ((y[1].date||'') + (y[1].time||'99')) ? -1 : 1;
+  const sec = (k, label, cls) => {
+    const arr = G[k]; if (!arr.length) return '';
+    arr.sort(k === 'done' ? (x,y) => (y[0].ts - x[0].ts) : by);
+    const list = k === 'done' ? arr.slice(0, 30) : arr;
+    return `<div class="tgroup ${cls||''}">${label} ${arr.length}</div><div class="titem">${list.map(([c,a]) => actHtml(c,a,true)).join('')}</div>`;
+  };
+  h += sec('late','지난 일','late') + sec('today','오늘') + sec('tomorrow','내일') + sec('week','이번 주') + sec('later','나중에') + sec('none','날짜 미정') + sec('done','끝낸 일');
+  return h;
+}
+
+// ---------------------------------------------------------------- assistant chat
+const SUGG = ['오늘 통화한 내용 정리해줘', '이번 주에 내가 해야 할 일 알려줘', '최근에 견적 요청한 거래처는 어디야?', '최근 한 달 클레임이나 불만 있었던 통화 찾아줘'];
+function viewChat(){
+  const log = S.data.chat || [];
+  let h = `<div class="chatwrap"><div class="top" style="padding-bottom:6px"><div class="row"><h1>비서</h1>${log.length?`<button class="btn ghost small" data-act="chatClear">새 대화</button>`:''}</div></div><div class="chatlog" id="chatlog">`;
+  if (!log.length){
+    h += `<div class="intro">지난 통화 내용을 물어보세요. 요약된 통화 ${S.calls.filter(c=>c.status==='done').length}개에서 찾아서 답해요.</div><div class="sugg">` +
+      SUGG.map(s => `<button data-act="ask" data-q="${esc(s)}">${esc(s)}</button>`).join('') + `</div>`;
+  }
+  for (const m of log){
+    h += `<div class="msg ${m.role}${m.err?' err':''}">${esc(m.text)}`;
+    if (m.refs && m.refs.length){
+      h += `<div class="refs">` + m.refs.filter(id => S.byId[id]).map(id => { const c = S.byId[id];
+        return `<button class="ref" data-act="open" data-id="${esc(id)}">${esc(c.contact)} ${shortWhen(c.ts)}</button>`; }).join('') + `</div>`;
+    }
+    h += `</div>`;
+  }
+  if (S.chatBusy) h += `<div class="msg model"><span class="spin"></span> 통화 기록을 찾아보는 중…</div>`;
+  h += `</div><div class="composer"><textarea id="chatin" rows="1" placeholder="예: 김사장님이 단가 얼마라고 했지?">${esc(S.chatDraft||'')}</textarea>
+    <button data-act="send" aria-label="보내기">${I.send}</button></div></div>`;
+  return h;
+}
+function scrollChat(){ const l = $('#chatlog'); if (l) l.scrollTop = l.scrollHeight; }
+function callLine(c){
+  const d = new Date(c.ts);
+  const when = `${ymd(d)} ${pad(d.getHours())}:${pad(d.getMinutes())} (${WD[d.getDay()]})`;
+  const who = c.contact + (c.company ? ` / ${c.company}` : '') + (c.counterpart ? ` / ${c.counterpart}` : '');
+  if (c.status !== 'done') return `[${c.id}] ${when} | ${who} | (아직 요약 안 됨, ${durLabel(c.dur)})`;
+  const acts = (c.actions||[]).map(a => `${a.done?'(완료)':''}${a.owner}:${a.title}${a.date?'@'+a.date+(a.time?' '+a.time:''):''}`).join('; ');
+  return `[${c.id}] ${when} | ${who} | ${c.category||''} | ${c.title||''} | 요약: ${(c.summary||[]).join(' ')}${acts?' | 할일: '+acts:''}${c.memo?' | 메모: '+c.memo:''}`;
+}
+function buildContext(question){
+  const lines = []; let size = 0;
+  for (const c of S.calls){ const l = callLine(c); if (size + l.length > 180000) break; lines.push(l); size += l.length; }
+  // full transcripts of the calls that look most relevant
+  const words = question.toLowerCase().split(/[\s,.?!]+/).filter(w => w.length >= 2).map(w => w.replace(/(은|는|이|가|을|를|에|에게|한테|랑|과|와|의|도|님|씨|이랑)$/,'')).filter(w => w.length >= 1);
+  const scored = S.calls.filter(c => c.status === 'done').map(c => {
+    const t = searchText(c); let s = 0;
+    for (const w of words){ if (w.length < 2) continue; if ((c.contact||'').toLowerCase().includes(w)) s += 5; if (t.includes(w)) s += 1; }
+    return [s, c];
+  }).filter(x => x[0] > 0).sort((a,b) => b[0] - a[0] || b[1].ts - a[1].ts);
+  const picked = scored.slice(0, 8).map(x => x[1]);
+  if (/오늘|어제|방금|최근|아까/.test(question)) S.calls.filter(c => c.status === 'done').slice(0, 4).forEach(c => { if (!picked.includes(c)) picked.push(c); });
+  let tx = ''; const LIM = 90000;
+  for (const c of picked){
+    const t = (c.transcript||[]).map(x => `${x.s === '나' ? '나' : '상대'}: ${x.t}`).join('\n');
+    if (tx.length + t.length > LIM) break;
+    tx += `\n\n### [${c.id}] ${c.contact} ${dayLabel(c.ts)} ${timeLabel(c.ts)} 대화 원문\n${t}`;
+  }
+  const meta = Object.entries(S.data.contacts).filter(([k,v]) => v.memo).map(([k,v]) => `${k}: ${v.memo}`).join('\n');
+  return `## 통화 목록 (최근순, 총 ${S.calls.length}건)\n${lines.join('\n')}` + (meta ? `\n\n## 거래처 메모\n${meta}` : '') + (tx ? `\n\n## 관련 통화 원문${tx}` : '');
+}
+async function ask(q){
+  q = q.trim(); if (!q || S.chatBusy) return;
+  if (!S.set.apiKey){ toast('설정에서 Gemini API 키를 먼저 넣어 주세요.'); return; }
+  S.data.chat = (S.data.chat || []).concat([{role:'user', text:q}]).slice(-40);
+  S.chatDraft = ''; S.chatBusy = true; saveData(); render();
+  const now = new Date();
+  const sys = `너는 영업 담당자(사용자)의 통화 비서야. 아래 '통화 기록'만 근거로 한국어로 짧고 정확하게 답해.
+- 오늘은 ${ymd(now)} (${WD[now.getDay()]}) ${pad(now.getHours())}:${pad(now.getMinutes())}.
+- 사용자 정보: ${S.set.myInfo || '영업 담당자'}
+- 금액·수량·날짜는 기록에 있는 그대로. 기록에 없으면 "통화 기록에서 찾지 못했어요"라고 말하고 추측하지 마.
+- 여러 건이면 거래처별로 줄을 나눠서. 마크다운 기호(#, **)는 쓰지 말고 필요하면 '-'로 목록.
+- refs에는 답의 근거가 된 통화 id(대괄호 안의 값)를 넣어.
+
+# 통화 기록
+${buildContext(q)}`;
+  const hist = S.data.chat.slice(-9, -1).filter(m => !m.err).map(m => ({role: m.role === 'user' ? 'user' : 'model', parts:[{text: m.text}]}));
+  const body = {
+    systemInstruction: {parts:[{text: sys}]},
+    contents: hist.concat([{role:'user', parts:[{text:q}]}]),
+    generationConfig: {temperature: 0.3, responseMimeType: 'application/json',
+      responseSchema: {type:'OBJECT', properties:{answer:{type:'STRING'}, refs:{type:'ARRAY', items:{type:'STRING'}}}, required:['answer']}}
+  };
+  let r = await nreq('ai', JSON.stringify(body));
+  if (r.status === -3 && /\(400\)/.test(r.body)){ delete body.generationConfig.responseSchema; r = await nreq('ai', JSON.stringify(body)); }
+  S.chatBusy = false;
+  let msg;
+  if (r.status === 200){
+    let o = null; try { o = JSON.parse(r.body); } catch(e){ const m = r.body.match(/\{[\s\S]*\}/); if (m) try { o = JSON.parse(m[0]); } catch(x){} }
+    msg = o && o.answer ? {role:'model', text:o.answer, refs:(o.refs||[]).slice(0,8)} : {role:'model', text:r.body || '답을 받지 못했어요.'};
+  } else msg = {role:'model', err:true, text: r.status === -1 ? '인터넷 연결을 확인하고 다시 물어봐 주세요.' : (r.body || '답을 받지 못했어요.')};
+  S.data.chat.push(msg); saveData();
+  if (S.tab === 'chat') render();
+}
+
+// ---------------------------------------------------------------- settings
+function viewSettings(){
+  const s = S.set; const p = JSON.parse(N.perms());
+  const tg = (k, on) => `<label class="toggle"><input type="checkbox" data-set="${k}" ${on?'checked':''}><span></span></label>`;
+  const permRow = (k, title, desc, ok) => `<div class="srow"><div class="l"><b>${title}</b><small>${desc}</small></div>${ok?'<span class="ok-t">허용됨</span>':`<button class="mini" data-act="perm" data-perm="${k}">허용</button>`}</div>`;
+  const cals = p.calendar ? JSON.parse(N.calendars()) : [];
+  let h = `<div class="top"><h1>설정</h1></div>`;
+  h += `<div class="group"><h3>AI 요약 (Gemini)</h3><div class="box">
+    <div class="field"><label for="apikey">API 키</label><div class="inl"><input id="apikey" type="password" value="${esc(s.apiKey)}" placeholder="AIza로 시작하는 키" autocomplete="off"><button class="btn small" data-act="saveKey">저장</button></div>
+      <small>구글 AI 스튜디오에서 무료로 만들 수 있어요. <button class="link" data-act="url" data-u="https://aistudio.google.com/apikey">키 만들기</button><br>
+      무료 키는 구글이 내용을 학습에 쓸 수 있어요. 거래처 통화라면 결제 정보를 등록한 유료 키를 권해요 (통화 1건에 몇십 원).</small></div>
+    <div class="field"><label for="model">모델</label><div class="inl"><select id="model" data-set="model"><option value="">자동 선택</option>${(S.models||[]).concat(s.model && !(S.models||[]).includes(s.model) ? [s.model] : []).map(m => `<option ${m===s.model?'selected':''}>${esc(m)}</option>`).join('')}</select>
+      <button class="btn ghost small" data-act="loadModels">불러오기</button></div><small>잘 모르겠으면 자동 선택에 두세요. 'flash'가 빠르고 저렴해요.</small></div>
+    <div class="srow"><div class="l"><b>통화 끝나면 자동 요약</b><small>새 녹음이 생기면 바로 받아쓰고 요약해서 알림을 보내요</small></div>${tg('auto', s.auto)}</div>
+    <div class="srow"><div class="l"><b>와이파이에서만 요약</b><small>모바일 데이터를 아끼고 싶을 때</small></div>${tg('wifiOnly', s.wifiOnly)}</div>
+    <div class="field"><label for="myinfo">내 소개 (요약 품질이 좋아져요)</label><textarea id="myinfo" rows="3" data-set="myInfo" placeholder="예: 이상규, ○○산업 영업팀. 주로 건설 자재(철근, 형강) 납품. 거래처는 현장 소장님들.">${esc(s.myInfo)}</textarea></div>
+  </div></div>`;
+  h += `<div class="group"><h3>일정·할 일 보내기</h3><div class="box">
+    <div class="field"><label for="calid">일정 넣을 캘린더</label>${p.calendar ? `<select id="calid" data-set="calId"><option value="">고르세요</option>${cals.map(c => `<option value="${c.id}" ${String(c.id)===String(s.calId)?'selected':''}>${esc(c.name)}${c.account && c.account!==c.name?` (${esc(c.account)})`:''}</option>`).join('')}</select>
+      <small>구글 계정 캘린더를 고르면 구글 캘린더와 상규 일정에도 보여요.</small>` : `<button class="btn ghost small" data-act="perm" data-perm="calendar">캘린더 권한 허용</button>`}</div>
+    <div class="field"><label for="remind">약속 알림</label><select id="remind" data-set="remindMin">${[['-1','알림 없음'],['10','10분 전'],['30','30분 전'],['60','1시간 전'],['1440','하루 전']].map(([v,l]) => `<option value="${v}" ${String(s.remindMin)===v?'selected':''}>${l}</option>`).join('')}</select></div>
+    <div class="srow"><div class="l"><b>구글 할 일</b><small>${s.taskAccount ? esc(s.taskAccount) + (s.taskListName ? `, 목록: ${esc(s.taskListName)}` : '') : '연결하면 할 일을 구글 할 일로 보낼 수 있어요'}</small></div>
+      ${s.taskAccount ? `<button class="mini" data-act="taskLists">목록</button><button class="mini" style="border-color:var(--rule);color:var(--muted)" data-act="taskOff">해제</button>` : `<button class="mini" data-act="taskOn">연결</button>`}</div>
+  </div></div>`;
+  h += `<div class="group"><h3>권한</h3><div class="box">
+    ${permRow('audio','통화 녹음 파일','갤럭시가 저장한 통화 녹음을 읽어요', p.audio)}
+    ${permRow('contacts','연락처','번호만 있는 녹음에 이름을 붙여요', p.contacts)}
+    ${permRow('calendar','캘린더','약속을 캘린더에 넣어요', p.calendar)}
+    ${permRow('notif','알림','요약이 끝나면 알려 드려요', p.notif)}
+    ${permRow('battery','배터리 최적화 제외','통화 직후 바로 요약되게 해요 (권장)', p.battery)}
+  </div></div>`;
+  h += `<div class="group"><h3>녹음</h3><div class="box">
+    <div class="srow"><div class="l"><b>갤럭시 자동 녹음 켜는 법</b></div><button class="mini" data-act="guide">보기</button></div>
+    <div class="srow"><div class="l"><b>새 녹음 지금 찾기</b></div><button class="mini" data-act="refresh">찾기</button></div>
+    <div class="srow"><div class="l"><b>녹음 파일 직접 추가</b><small>다른 앱의 녹음도 넣을 수 있어요. 파일 앱에서 '공유 › 상규 통화비서'도 돼요.</small></div><button class="mini" data-act="pickAudio">추가</button></div>
+    <div class="field"><label for="recpath">녹음 폴더</label><input id="recpath" data-set="recPath" value="${esc(s.recPath)}"><small>기본값: Recordings/Call/,Call/ (쉼표로 여러 개)</small></div>
+  </div></div>`;
+  h += `<div class="group"><h3>백업</h3><div class="box">
+    <div class="srow"><div class="l"><b>요약·메모 백업 저장</b><small>녹음 파일은 빼고 저장해요</small></div><button class="mini" data-act="backup">저장</button></div>
+    <div class="srow"><div class="l"><b>백업 불러오기</b></div><label class="mini" style="display:inline-block">불러오기<input type="file" id="restore" accept="application/json,.json" style="display:none"></label></div>
+  </div></div>
+  <div class="empty" style="padding:24px">상규 통화비서 ${esc(N.version())}</div>`;
+  return h;
+}
+
+// ---------------------------------------------------------------- dialogs
+function dialog(html, onMount){
+  const d = document.createElement('div'); d.className = 'scrim'; d.innerHTML = `<div class="dlg" role="dialog">${html}</div>`;
+  d.addEventListener('click', e => { if (e.target === d) closeDialog(); });
+  document.body.appendChild(d); if (onMount) onMount(d); return d;
+}
+function closeDialog(){ const d = document.querySelector('.scrim:last-of-type'); if (d){ d.remove(); return true; } return false; }
+function guide(){
+  S.data.recGuideSeen = true; saveData();
+  dialog(`<h3>갤럭시 통화 자동 녹음 켜기</h3><div class="guide"><ol>
+    <li>기본 <b>전화</b> 앱을 열어요</li><li>오른쪽 위 <b>⋮</b> › <b>설정</b></li><li><b>통화 녹음</b> › <b>통화 자동 녹음</b> 켜기</li>
+    <li><b>모든 통화</b> 또는 <b>저장되지 않은 번호</b> 등 원하는 범위를 골라요</li></ol>
+    <p style="color:var(--muted);font-size:13.5px;line-height:1.6">녹음은 휴대폰의 <b>Recordings/Call</b> 폴더에 저장되고, 이 앱이 거기서 새 녹음을 가져와요. 통화를 녹음할 땐 상대에게 알리는 게 좋아요.</p></div>
+    <div class="btns"><button class="btn" data-act="closeDlg">알겠어요</button></div>`);
+  render();
+}
+function editActDialog(cid, aid){
+  const c = S.byId[cid]; if (!c) return;
+  const isNew = !aid;
+  const a = isNew ? {id:'a'+Date.now().toString(36), type:'todo', title:'', owner:'나', date:'', time:'', note:'', done:false} : (c.actions||[]).find(x => x.id === aid);
+  if (!a) return;
+  dialog(`<h3>${isNew?'할 일 추가':'할 일 고치기'}</h3>
+    <div class="field"><label>종류</label><div class="seg" id="atype"><button data-v="todo" class="${a.type==='todo'?'on':''}">할 일</button><button data-v="event" class="${a.type==='event'?'on':''}">약속</button></div></div>
+    <div class="field"><label for="atitle">내용</label><input id="atitle" value="${esc(a.title)}"></div>
+    <div class="field"><label>누가</label><div class="seg" id="aowner">${['나','상대','함께'].map(o => `<button data-v="${o}" class="${a.owner===o?'on':''}">${o}</button>`).join('')}</div></div>
+    <div class="field" style="display:flex;gap:8px"><div style="flex:1.4"><label for="adate">날짜</label><input id="adate" type="date" value="${esc(a.date)}"></div><div style="flex:1"><label for="atime">시간</label><input id="atime" type="time" value="${esc(a.time)}"></div></div>
+    <div class="field"><label for="anote">메모</label><input id="anote" value="${esc(a.note)}"></div>
+    <div class="btns">${isNew?'':'<button class="btn red" id="adel">지우기</button><span style="flex:1"></span>'}<button class="btn ghost" data-act="closeDlg">취소</button><button class="btn" id="asave">저장</button></div>`, d => {
+    d.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); }));
+    d.querySelector('#asave').onclick = () => {
+      const v = {
+        type: d.querySelector('#atype .on').dataset.v, owner: d.querySelector('#aowner .on').dataset.v,
+        title: d.querySelector('#atitle').value.trim(), date: d.querySelector('#adate').value, time: d.querySelector('#atime').value, note: d.querySelector('#anote').value.trim()
+      };
+      if (!v.title){ toast('내용을 적어 주세요'); return; }
+      const acts = (c.actions||[]).slice();
+      if (isNew) acts.push(Object.assign(a, v)); else Object.assign(acts.find(x => x.id === aid), v);
+      patch(cid, {actions: acts}); c._s = null; closeDialog(); render();
+    };
+    const del = d.querySelector('#adel');
+    if (del) del.onclick = () => { patch(cid, {actions:(c.actions||[]).filter(x => x.id !== aid)}); closeDialog(); render(); };
+  });
+}
+function callMenu(){
+  const c = S.byId[S.page.id];
+  dialog(`<h3>${esc(c.contact)} 통화</h3><div class="box" style="border:0">
+    <div class="srow" data-act="renameCall" role="button"><div class="l"><b>상대 이름 고치기</b><small>이 사람의 다른 통화도 함께 바꿀 수 있어요</small></div></div>
+    ${c.status==='done'?`<div class="srow" data-act="requeue" role="button"><div class="l"><b>다시 요약하기</b><small>요약이 이상할 때. 고친 할 일은 새로 바뀌어요</small></div></div>`:''}
+    <div class="srow" data-act="hideCall" role="button"><div class="l"><b style="color:var(--red)">목록에서 지우기</b><small>앱에서만 지워져요. 휴대폰의 녹음 파일은 그대로예요</small></div></div>
+  </div><div class="btns"><button class="btn ghost" data-act="closeDlg">닫기</button></div>`);
+}
+function renameDialog(oldName, comp){
+  dialog(`<h3>이름·회사 고치기</h3>
+    <div class="field"><label for="rn">이름</label><input id="rn" value="${esc(oldName)}"></div>
+    <div class="field"><label for="rc">회사</label><input id="rc" value="${esc(comp)}"></div>
+    <div class="field"><label class="toggle-l" style="display:flex;align-items:center;gap:10px;font-weight:500"><input type="checkbox" id="rall" checked> '${esc(oldName)}'의 통화 모두 바꾸기</label></div>
+    <div class="btns"><button class="btn ghost" data-act="closeDlg">취소</button><button class="btn" id="rsave">저장</button></div>`, d => {
+    d.querySelector('#rsave').onclick = () => {
+      const nn = d.querySelector('#rn').value.trim() || oldName, nc = d.querySelector('#rc').value.trim(), all = d.querySelector('#rall').checked;
+      const targets = all ? S.calls.filter(c => c.contact === oldName) : [S.byId[S.page.id]].filter(Boolean);
+      targets.forEach(c => { patch(c.id, {contact: nn}); c._s = null; });
+      const meta = Object.assign({}, S.data.contacts[oldName] || {}, S.data.contacts[nn] || {});
+      meta.company = nc; S.data.contacts[nn] = meta; if (all && nn !== oldName) delete S.data.contacts[oldName];
+      saveData(); closeDialog();
+      if (S.page && S.page.kind === 'contact') S.page.name = nn;
+      render();
+    };
+  });
+}
+async function taskLists(){
+  const r = await nreq('gRequest', 'GET', 'https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=100', '');
+  if (r.status !== 200){ if (r.status !== -2) toast(r.status === -1 ? '인터넷 연결을 확인하세요.' : (r.body || '목록을 불러오지 못했어요.')); return; }
+  const items = (JSON.parse(r.body).items || []);
+  dialog(`<h3>할 일 넣을 목록</h3><div class="box" style="border:0">${items.map(l => `<div class="srow" role="button" data-act="pickList" data-id="${esc(l.id)}" data-name="${esc(l.title)}"><div class="l"><b>${esc(l.title)}</b></div>${l.id===S.set.taskList?'<span class="ok-t">선택됨</span>':''}</div>`).join('')}</div>
+    <div class="btns"><button class="btn ghost" data-act="closeDlg">닫기</button></div>`);
+}
+
+// ---------------------------------------------------------------- sending actions out
+function findAct(cid, aid){ const c = S.byId[cid]; return c ? [c, (c.actions||[]).find(a => a.id === aid)] : [null, null]; }
+function setSent(c, aid, k, v){
+  const acts = (c.actions||[]).map(a => a.id === aid ? Object.assign({}, a, {sent: Object.assign({}, a.sent||{}, {[k]: v})}) : a);
+  patch(c.id, {actions: acts});
+}
+async function toCal(cid, aid){
+  const [c, a] = findAct(cid, aid); if (!a) return;
+  if (!JSON.parse(N.perms()).calendar){ N.askPerm('calendar'); return; }
+  if (!S.set.calId){ toast('설정에서 일정 넣을 캘린더를 먼저 골라 주세요.'); S.page = null; S.tab = 'set'; render(); return; }
+  let date = a.date;
+  if (!date){ editActDialog(cid, aid); toast('날짜를 정해 주세요'); return; }
+  const desc = `${c.contact}${c.company?` (${c.company})`:''} 통화에서 (${dayLabel(c.ts)} ${timeLabel(c.ts)})\n${a.note?a.note+'\n':''}\n${(c.summary||[]).map(s => '- ' + s).join('\n')}\n\n상규 통화비서`;
+  const title = a.title.includes(c.contact) || (c.company && a.title.includes(c.company)) ? a.title : `${a.title} (${c.contact})`;
+  const r = await nreq('addEvent', JSON.stringify({calId: +S.set.calId, title, desc, date, time: a.time || '', minutes: 60, remind: +(S.set.remindMin ?? 30)}));
+  if (r.status === 200){ setSent(c, aid, 'cal', r.body); toast('캘린더에 넣었어요'); renderPage(); render(); }
+  else toast(r.body || '캘린더에 넣지 못했어요');
+}
+async function toTask(cid, aid){
+  const [c, a] = findAct(cid, aid); if (!a) return;
+  if (!S.set.taskAccount){ toast('설정에서 구글 할 일을 먼저 연결해 주세요.'); S.page = null; S.tab = 'set'; render(); return; }
+  const list = S.set.taskList || '@default';
+  const title = a.title.includes(c.contact) ? a.title : `${a.title} (${c.contact})`;
+  const notes = `${c.contact} 통화 ${dayLabel(c.ts)} ${timeLabel(c.ts)}${a.time ? `\n시간: ${a.time}` : ''}${a.note ? `\n${a.note}` : ''}\n\n${(c.summary||[]).slice(0,3).map(s => '- ' + s).join('\n')}`;
+  const body = {title, notes};
+  if (a.date) body.due = a.date + 'T00:00:00.000Z';
+  const r = await nreq('gRequest', 'POST', `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(list)}/tasks`, JSON.stringify(body));
+  if (r.status === 200){ setSent(c, aid, 'task', JSON.parse(r.body).id || '1'); toast('구글 할 일에 넣었어요'); renderPage(); render(); }
+  else if (r.status === -2) toast('구글 권한을 허용한 뒤 다시 눌러 주세요.');
+  else toast(r.status === -1 ? '인터넷 연결을 확인하세요.' : (r.body && r.body.length < 120 ? r.body : '구글 할 일에 넣지 못했어요'));
+}
+
+// ---------------------------------------------------------------- events
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const d = el.dataset, act = d.act;
+  switch (act){
+    case 'tab': S.tab = d.k; S.page = null; stopAudioTimer(); N.audioStop(); closeDialog(); $('#view').scrollTop = 0; render(); if (d.k === 'set' && S.set.apiKey && !S.models) loadModels(true); break;
+    case 'filter': S.filter = d.k; render(); break;
+    case 'refresh': refresh(true); break;
+    case 'open': openCall(d.id); break;
+    case 'back': goBack(); break;
+    case 'queue': N.queue(JSON.stringify([d.id])); break;
+    case 'queueRecent': N.queue(JSON.stringify(S.calls.filter(c => c.status === 'new' && c.ts > Date.now() - 7*864e5).map(c => c.id))); break;
+    case 'requeue': closeDialog(); N.queue(JSON.stringify([S.page.id])); break;
+    case 'perm': N.askPerm(d.perm); break;
+    case 'guide': guide(); break;
+    case 'closeDlg': closeDialog(); break;
+    case 'pickAudio': N.pickAudio(); break;
+    case 'sub': S.page.sub = d.k; renderPage(true); break;
+    case 'star': { const c = S.byId[S.page.id]; patch(c.id, {star: !c.star}); renderPage(); break; }
+    case 'callMenu': callMenu(); break;
+    case 'renameCall': { closeDialog(); const c = S.byId[S.page.id]; renameDialog(c.contact, companyOf(c.contact)); break; }
+    case 'renameContact': renameDialog(S.page.name, companyOf(S.page.name)); break;
+    case 'hideCall': closeDialog(); N.audioStop(); N.removeCall(S.page.id); S.page = null; toast('목록에서 지웠어요'); break;
+    case 'openContact': openContact(d.name); break;
+    case 'play': {
+      const c = S.byId[S.page.id]; const st = JSON.parse(N.audioState());
+      if (st.uri === c.uri && st.playing) N.audioPause();
+      else if (!N.audioPlay(c.uri, st.uri === c.uri ? -1 : 0)) toast('녹음을 재생할 수 없어요');
+      syncPlayer(); break;
+    }
+    case 'speed': { const st = JSON.parse(N.audioState()); const sp = [1,1.25,1.5,2]; const nx = sp[(sp.indexOf(st.speed || 1) + 1) % sp.length]; N.audioSpeed(String(nx)); el.textContent = nx + 'x'; break; }
+    case 'toggleAct': {
+      const [c, a] = findAct(d.id, d.a); if (!a) break;
+      patch(c.id, {actions: c.actions.map(x => x.id === a.id ? Object.assign({}, x, {done: !x.done}) : x)});
+      render(); break;
+    }
+    case 'editAct': editActDialog(d.id, d.a); break;
+    case 'addAct': editActDialog(d.id, null); break;
+    case 'toCal': toCal(d.id, d.a); break;
+    case 'toTask': toTask(d.id, d.a); break;
+    case 'openEvent': N.openEvent(d.ev); break;
+    case 'shareSum': N.shareText(summaryText(S.byId[S.page.id])); break;
+    case 'copySum': N.copyText(summaryText(S.byId[S.page.id])); break;
+    case 'todoMine': S.todoMine = d.k === '1'; render(); break;
+    case 'ask': ask(d.q); break;
+    case 'send': { const t = $('#chatin'); ask(t.value); break; }
+    case 'chatClear': S.data.chat = []; saveData(); render(); break;
+    case 'brief': {
+      const name = d.name; S.page = null; S.tab = 'chat';
+      ask(`${name} 거래처와 지금까지 통화한 내용을 다음 통화 전에 알아야 할 것 위주로 브리핑해줘. 진행 중인 건, 약속한 것, 남은 할 일, 조건(단가·수량·납기)을 정리해서.`); break;
+    }
+    case 'saveKey': { const v = $('#apikey').value.trim(); N.setSetting('apiKey', v); S.set.apiKey = v; toast(v ? 'API 키를 저장했어요' : 'API 키를 지웠어요'); if (v) loadModels(false); else render(); break; }
+    case 'loadModels': loadModels(false); break;
+    case 'url': N.openUrl(d.u); break;
+    case 'taskOn': N.tasksConnect(); break;
+    case 'taskOff': N.tasksDisconnect(); break;
+    case 'taskLists': taskLists(); break;
+    case 'pickList': N.setSetting('taskList', d.id); N.setSetting('taskListName', d.name); S.set.taskList = d.id; S.set.taskListName = d.name; closeDialog(); render(); toast(`'${d.name}' 목록에 넣을게요`); break;
+    case 'backup': {
+      const out = JSON.stringify({app:'callbiseo', v:1, at:Date.now(), calls:S.calls.map(c => { const x = Object.assign({}, c); delete x._s; return x; }), data:S.data});
+      N.saveFile(`통화비서_백업_${today()}.json`, out); break;
+    }
+  }
+});
+async function loadModels(silent){
+  const r = await nreq('aiModels');
+  if (r.status === 200){ S.models = JSON.parse(r.body); if (!silent) toast(`API 키가 잘 돼요. 모델 ${S.models.length}개를 찾았어요`); }
+  else if (!silent) toast(r.status === -1 ? '인터넷 연결을 확인하세요.' : (r.body || 'API 키를 확인해 주세요.'));
+  if (S.tab === 'set') render();
+}
+document.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role=button]')){ e.preventDefault(); e.target.click(); }
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'q'){ S.q = t.value; clearTimeout(S.qT); S.qT = setTimeout(() => { const pos = t.selectionStart; render(); const n = $('#q'); if (n){ n.focus(); n.setSelectionRange(pos,pos); } }, 200); }
+  else if (t.id === 'pq'){ S.pq = t.value; clearTimeout(S.qT); S.qT = setTimeout(() => { const pos = t.selectionStart; render(); const n = $('#pq'); if (n){ n.focus(); n.setSelectionRange(pos,pos); } }, 200); }
+  else if (t.id === 'memo'){ const c = S.byId[S.page.id]; c.memo = t.value; c._s = null; clearTimeout(S.mT); S.mT = setTimeout(() => N.patchCall(c.id, JSON.stringify({memo: c.memo})), 400); }
+  else if (t.id === 'cmemo'){ const n = S.page.name; S.data.contacts[n] = Object.assign({}, S.data.contacts[n], {memo: t.value}); saveData(); }
+  else if (t.id === 'chatin'){ S.chatDraft = t.value; t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; }
+  else if (t.id === 'seek'){ t.dataset.drag = '1'; }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'seek'){ N.audioSeek(+t.value); delete t.dataset.drag; syncPlayer(); return; }
+  if (t.id === 'restore'){ restore(t.files[0]); return; }
+  const k = t.dataset.set; if (!k) return;
+  const v = t.type === 'checkbox' ? String(t.checked) : t.value;
+  N.setSetting(k, v); S.set[k] = t.type === 'checkbox' ? t.checked : v;
+  if (k === 'auto' && t.checked) toast('새 통화가 끝나면 자동으로 요약해요');
+});
+function restore(file){
+  if (!file) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    try {
+      const o = JSON.parse(fr.result);
+      if (o.app !== 'callbiseo') throw 0;
+      const n = N.importBackup(JSON.stringify(o.calls || []));
+      if (o.data){ S.data.contacts = Object.assign({}, o.data.contacts || {}, S.data.contacts); saveData(); }
+      reloadCalls(); toast(`통화 ${Math.max(0,n)}개를 불러왔어요`);
+    } catch(e){ toast('상규 통화비서 백업 파일이 아니에요'); }
+  };
+  fr.readAsText(file);
+}
+function goBack(){
+  if (closeDialog()) return true;
+  if (S.page){
+    stopAudioTimer();
+    if (S.page.kind === 'call'){ N.audioStop(); S.page = S.page.back || null; }
+    else S.page = null;
+    render(); return true;
+  }
+  if (S.tab !== 'calls'){ S.tab = 'calls'; render(); return true; }
+  return false;
+}
+window.__onBack = goBack;
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'chatin'){ e.preventDefault(); ask(e.target.value); } });
+
+// ---------------------------------------------------------------- start
+loadAll();
+render();
+refresh(false);
+window.__native.launch();
+setInterval(() => { if (S.calls.some(c => c.status === 'queued' || c.status === 'working') && !S.page && S.tab === 'calls') render(); }, 5000);
+</script>
+</body>
+</html>
