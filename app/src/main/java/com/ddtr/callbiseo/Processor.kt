@@ -21,6 +21,8 @@ object Processor {
     private val exec = Executors.newSingleThreadExecutor()
     /** 하루 한도에 걸리면 그때까지는 대기열을 돌리지 않는다 */
     @Volatile var dailyLimitUntil = 0L
+    /** 비서에게 질문하는 동안은 요약을 잠깐 쉬어서 한도를 비서에게 양보 */
+    @Volatile var holdUntil = 0L
     @Volatile var current: String? = null
         private set
 
@@ -89,8 +91,10 @@ object Processor {
         var guard = 0
         while (guard++ < 200) {
             if (canWork(ctx) != null) break
+            while (System.currentTimeMillis() < holdUntil) Thread.sleep(1000)
             val id = Store.nextQueued(ctx) ?: break
             processOne(ctx, id)
+            Thread.sleep(4000) // 무료 한도(분당 횟수)에 덜 걸리게 간격 두기
         }
     }
 
@@ -106,11 +110,23 @@ object Processor {
             val bytes = Recordings.readBytes(ctx, call.optString("uri"))
                 ?: throw AiException(0, "녹음 파일을 열 수 없어요. 파일이 지워졌거나 권한이 없어요.")
             if (bytes.size > 300 * 1024 * 1024) throw AiException(0, "녹음 파일이 너무 커요.")
-            val model = Gemini.model(ctx, key)
+            var model = Gemini.model(ctx, key)
             val mime = Recordings.geminiMime(call.optString("file"), call.optString("mime"))
             val part = Gemini.audioPart(key, bytes, mime)
             uploaded = part.second
-            val result = ask(key, model, part.first, call, ctx, full = true)
+            var result: JSONObject? = null
+            var limitErr: AiException? = null
+            for (m in listOf(model) + Gemini.backups(ctx, key, model)) {
+                try {
+                    result = ask(key, m, part.first, call, ctx, full = true)
+                    model = m
+                    break
+                } catch (e: AiException) {
+                    if (e.code != 429 && e.code != 404) throw e
+                    limitErr = e
+                }
+            }
+            if (result == null) throw limitErr ?: AiException(0, "요약하지 못했어요.", true)
             saveResult(ctx, id, result, model)
             notifyDone(ctx, id)
         } catch (e: AiException) {

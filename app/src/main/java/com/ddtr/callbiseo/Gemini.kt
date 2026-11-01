@@ -10,7 +10,8 @@ import java.net.URL
 class AiException(
     val code: Int, message: String, val retry: Boolean = false,
     /** 하루 무료 한도를 다 쓴 경우 */ val daily: Boolean = false,
-    /** 서버가 알려준 대기 시간(초), 모르면 0 */ val waitSec: Int = 0
+    /** 서버가 알려준 대기 시간(초), 모르면 0 */ val waitSec: Int = 0,
+    /** 원인 확인용: 모델, 한도 종류 */ var detail: String = ""
 ) : Exception(message)
 
 /** Google Gemini API over plain HTTPS (generateContent + Files API). */
@@ -74,7 +75,7 @@ object Gemini {
                 tokens -> "1분 동안 AI에 보낼 수 있는 ${kind}양을 넘었어요. 1분쯤 뒤에 다시 해 주세요."
                 else -> "1분 동안 쓸 수 있는 ${kind}AI 횟수${if (quotaValue.isNotEmpty()) "(분당 ${quotaValue}번)" else ""}를 넘었어요. 잠깐 뒤에 다시 해 주세요."
             }
-            return AiException(429, text, true, daily, waitSec)
+            return AiException(429, text, true, daily, waitSec, listOf(quotaId, if (quotaValue.isNotEmpty()) "한도 $quotaValue" else "").filter { it.isNotEmpty() }.joinToString(", ").ifEmpty { msg.take(120) })
         }
         val friendly = when {
             r.code == 400 && msg.contains("API key", true) -> "API 키가 올바르지 않아요. 설정에서 다시 확인해 주세요."
@@ -159,13 +160,39 @@ object Gemini {
         var r = http("POST", "$BASE/v1beta/models/$model:generateContent", key, bytes)
         if (r.code == 429) {
             val e = errorOf(r)
-            if (!e.daily && e.waitSec in 1..45) {
+            if (!e.daily && e.waitSec in 1..20) {
                 Thread.sleep(e.waitSec * 1000L + 1500)
                 r = http("POST", "$BASE/v1beta/models/$model:generateContent", key, bytes)
             }
         }
-        if (r.code != 200) throw errorOf(r)
+        if (r.code != 200) throw errorOf(r).also { it.detail = model + (if (it.detail.isNotEmpty()) ", " + it.detail else "") }
         return JSONObject(r.body)
+    }
+
+    /** 사용할 수 있는 모델 목록 (3일 동안 기억) */
+    fun cachedModels(ctx: android.content.Context, key: String): List<String> {
+        val p = Prefs.of(ctx)
+        val at = p.getLong("modelListAt", 0L)
+        val saved = p.getString("modelList", "") ?: ""
+        if (saved.isNotEmpty() && System.currentTimeMillis() - at < 3 * 86_400_000L)
+            return saved.split(',').filter { it.isNotEmpty() }
+        return try {
+            val list = listModels(key)
+            p.edit().putString("modelList", list.joinToString(",")).putLong("modelListAt", System.currentTimeMillis()).apply()
+            list
+        } catch (e: Exception) { saved.split(',').filter { it.isNotEmpty() } }
+    }
+
+    /**
+     * 한도에 걸렸을 때 바꿔 쓸 모델들. 무료 한도는 모델마다 따로라서 다른 모델로 바꾸면 대개 바로 된다.
+     * 정식(preview 아닌) flash-lite → 다른 flash 순서.
+     */
+    fun backups(ctx: android.content.Context, key: String, primary: String): List<String> {
+        val all = cachedModels(ctx, key).filter { it != primary && !Regex("tts|image|live|embedding|robotics|audio|transcribe|computer|exp|native").containsMatchIn(it) }
+        val lite = all.filter { it.contains("flash-lite") }.sortedBy { if (it.contains("preview")) 1 else 0 }
+        val flash = all.filter { it.contains("flash") && !it.contains("lite") }.sortedBy { if (it.contains("preview")) 1 else 0 }
+        val out = (lite.take(2) + flash.take(1) + listOf("gemini-flash-lite-latest", "gemini-flash-latest")).filter { it != primary }.distinct()
+        return out.take(3)
     }
 
     fun textOf(resp: JSONObject): String {

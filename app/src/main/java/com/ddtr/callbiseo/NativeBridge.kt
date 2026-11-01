@@ -196,9 +196,25 @@ class NativeBridge(private val act: MainActivity) {
             try {
                 val key = Prefs.apiKey(ctx)
                 if (key.isEmpty()) { done(id, -3, "설정에서 Gemini API 키를 먼저 넣어 주세요."); return@execute }
-                val model = Gemini.model(ctx, key)
-                val resp = Gemini.generate(key, model, JSONObject(body))
-                val out = JSONObject().put("text", Gemini.textOf(resp))
+                Processor.holdUntil = System.currentTimeMillis() + 60_000L
+                val req = JSONObject(body)
+                val primary = Gemini.model(ctx, key)
+                var resp: JSONObject? = null
+                var used = primary
+                var lastErr: AiException? = null
+                for (m in listOf(primary) + Gemini.backups(ctx, key, primary)) {
+                    try { resp = Gemini.generate(key, m, req); used = m; break }
+                    catch (e: AiException) { if (e.code != 429 && e.code != 404) throw e; lastErr = e }
+                }
+                if (resp == null && req.has("tools")) {
+                    // 검색 기능 한도일 수도 있으니 검색 없이 한 번 더
+                    req.remove("tools")
+                    val m = Gemini.backups(ctx, key, primary).firstOrNull() ?: primary
+                    try { resp = Gemini.generate(key, m, req); used = m } catch (e: AiException) { lastErr = e }
+                }
+                Processor.holdUntil = 0L
+                if (resp == null) throw lastErr ?: AiException(0, "답을 받지 못했어요.")
+                val out = JSONObject().put("text", Gemini.textOf(resp)).put("model", used)
                 val src = JSONArray()
                 val chunks = resp.optJSONArray("candidates")?.optJSONObject(0)
                     ?.optJSONObject("groundingMetadata")?.optJSONArray("groundingChunks")
@@ -208,7 +224,10 @@ class NativeBridge(private val act: MainActivity) {
                 }
                 out.put("sources", src)
                 done(id, 200, out.toString())
-            } catch (e: AiException) { done(id, -3, e.message ?: "") } catch (e: IOException) { done(id, -1, "") } catch (e: Exception) { done(id, -3, e.message ?: "") }
+            } catch (e: AiException) {
+                Processor.holdUntil = 0L
+                done(id, -3, (e.message ?: "") + (if (e.detail.isNotEmpty()) "\n\n(${e.detail})" else ""))
+            } catch (e: IOException) { Processor.holdUntil = 0L; done(id, -1, "") } catch (e: Exception) { Processor.holdUntil = 0L; done(id, -3, e.message ?: "") }
         }
     }
 
