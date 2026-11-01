@@ -148,6 +148,17 @@ mark{background:var(--amber-soft);color:inherit;border-radius:3px;padding:0 1px}
 textarea.memo{width:100%;min-height:200px;border:1px solid var(--rule);border-radius:12px;background:var(--sheet);padding:12px;resize:vertical;line-height:1.6;outline:none}
 textarea.memo:focus,.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--green)}
 .dfoot{display:flex;gap:8px;flex-wrap:wrap;padding:22px 18px 0}
+/* todo, grouped by call */
+.tsub{margin-top:4px;font-size:13.5px;color:var(--muted)}
+.tcard{margin:12px 16px 0;background:var(--sheet);border:1px solid var(--rule);border-radius:16px;overflow:hidden}
+.tcard.late{border-color:var(--red)}
+.thead{display:flex;align-items:center;gap:10px;padding:12px 12px 10px 14px;background:var(--rule2)}
+.tinfo{flex:1;min-width:0;display:flex;gap:10px;align-items:center}
+.tinfo .ava{width:36px;height:36px;font-size:15px;border-radius:11px}
+.tcall{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thead .mini{padding:6px 12px;font-size:13.5px;background:var(--green);color:#fff;border-color:var(--green)}
+.thead .ghostmini{background:transparent;color:var(--muted);border-color:var(--rule)}
+.tacts{padding:0 14px}
 /* todo */
 .tgroup{padding:16px 16px 6px;font-size:13px;font-weight:800;color:var(--muted)}
 .tgroup.late{color:var(--red)}
@@ -328,7 +339,7 @@ function companyOf(name){
   const meta = S.data.contacts[name]; if (meta && meta.company) return meta.company;
   const c = S.calls.find(x => x.contact === name && x.company); return c ? c.company : '';
 }
-function myActs(c){ return (c.actions||[]).filter(a => a.owner !== '상대'); }
+function myActs(c){ return c.actions||[]; }
 function openActs(c){ return myActs(c).filter(a => !a.done); }
 let toastT = 0;
 function toast(m){ const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2600); }
@@ -545,7 +556,7 @@ function pageCall(){
 function actHtml(c, a, showSrc){
   const late = !a.done && a.date && a.date < today();
   const sent = a.sent || {};
-  const who = a.owner && a.owner !== '나' ? ` (${esc(a.owner)})` : '';
+  const who = a.owner && a.owner !== '나' ? ` <span class="tag" style="vertical-align:2px;font-size:11px">${esc(a.owner)}</span>` : '';
   return `<div class="act ${a.done?'done':''}">
     <button class="chk ${a.done?'on':''}" data-act="toggleAct" data-id="${esc(c.id)}" data-a="${esc(a.id)}" aria-label="완료">${a.done?I.check:''}</button>
     <div class="am"><div class="at" data-act="editAct" data-id="${esc(c.id)}" data-a="${esc(a.id)}" role="button" tabindex="0">${esc(a.title)}${who}</div>
@@ -633,36 +644,42 @@ function pageContact(){
 
 // ---------------------------------------------------------------- todo tab
 function viewTodo(){
-  let h = `<div class="top"><h1>할 일</h1></div>
-    <div style="padding:0 16px"><div class="seg"><button class="${S.todoMine?'on':''}" data-act="todoMine" data-k="1">내 할 일</button><button class="${!S.todoMine?'on':''}" data-act="todoMine" data-k="0">상대 할 일 포함</button></div></div>`;
-  const items = [];
-  for (const c of S.calls) for (const a of (c.actions||[])) if (!S.todoMine || a.owner !== '상대') items.push([c,a]);
-  if (!items.length) return h + `<div class="empty"><b>할 일이 없어요</b>통화에서 "보내 드릴게요", "화요일에 뵙죠" 같은 말이 나오면 여기에 정리돼요.</div>`;
-  const t = today(), tm = addDays(t,1);
-  const dow = new Date().getDay(); const weekEnd = addDays(t, 7 - (dow || 7));
-  const G = {late:[], today:[], tomorrow:[], week:[], later:[], none:[], done:[]};
-  for (const it of items){
-    const a = it[1];
-    if (a.done) G.done.push(it);
-    else if (!a.date) G.none.push(it);
-    else if (a.date < t) G.late.push(it);
-    else if (a.date === t) G.today.push(it);
-    else if (a.date === tm) G.tomorrow.push(it);
-    else if (a.date <= weekEnd) G.week.push(it);
-    else G.later.push(it);
+  const showDone = !!S.todoDone;
+  const groups = S.calls.filter(c => (c.actions||[]).length).map(c => ({c, open:(c.actions||[]).filter(a => !a.done), done:(c.actions||[]).filter(a => a.done)}));
+  const openGroups = groups.filter(g => g.open.length);
+  const totalOpen = openGroups.reduce((n,g) => n + g.open.length, 0);
+  const totalDone = groups.reduce((n,g) => n + g.done.length, 0);
+  let h = `<div class="top"><div class="row"><h1>할 일</h1>${!showDone && totalOpen ? `<button class="btn small" data-act="doneAll">모두 확인</button>` : ''}</div>
+    <div class="tsub">${totalOpen ? `통화 ${openGroups.length}건에서 남은 할 일 ${totalOpen}개` : '남은 할 일이 없어요'}</div></div>
+    <div style="padding:0 16px"><div class="seg"><button class="${!showDone?'on':''}" data-act="todoDone" data-k="0">남은 할 일 ${totalOpen}</button><button class="${showDone?'on':''}" data-act="todoDone" data-k="1">확인한 할 일 ${totalDone}</button></div></div>`;
+  const list = (showDone ? groups.filter(g => g.done.length) : openGroups).slice(0, showDone ? 60 : 500);
+  if (!list.length) return h + (showDone ? `<div class="empty"><b>확인한 할 일이 없어요</b></div>`
+    : `<div class="empty"><b>모두 확인했어요</b>통화에서 "보내 드릴게요", "화요일에 뵙죠" 같은 말이 나오면 통화별로 여기에 정리돼요.</div>`);
+  const t = today();
+  for (const g of list){
+    const c = g.c, acts = showDone ? g.done : g.open;
+    const late = !showDone && acts.some(a => a.date && a.date < t);
+    const comp = c.company || companyOf(c.contact);
+    h += `<div class="tcard${late?' late':''}">
+      <div class="thead">
+        <div class="tinfo" data-act="open" data-id="${esc(c.id)}" role="button" tabindex="0">${ava(c.contact)}
+          <div class="cmain"><div class="cline1"><span class="cname">${esc(c.contact)}</span><span class="ccomp">${esc(comp)}</span></div>
+          <div class="tcall">${shortWhen(c.ts)} 통화${c.title ? `, ${esc(c.title)}` : ''}</div></div></div>
+        ${showDone ? `<button class="mini ghostmini" data-act="undoCall" data-id="${esc(c.id)}">되돌리기</button>`
+                   : `<button class="mini" data-act="doneCall" data-id="${esc(c.id)}">확인 ${acts.length}</button>`}
+      </div>
+      <div class="tacts">${acts.map(a => actHtml(c, a, false)).join('')}</div></div>`;
   }
-  const by = (x,y) => ((x[1].date||'') + (x[1].time||'99')) < ((y[1].date||'') + (y[1].time||'99')) ? -1 : 1;
-  const sec = (k, label, cls) => {
-    const arr = G[k]; if (!arr.length) return '';
-    arr.sort(k === 'done' ? (x,y) => (y[0].ts - x[0].ts) : by);
-    const list = k === 'done' ? arr.slice(0, 30) : arr;
-    return `<div class="tgroup ${cls||''}">${label} ${arr.length}</div><div class="titem">${list.map(([c,a]) => actHtml(c,a,true)).join('')}</div>`;
-  };
-  h += sec('late','지난 일','late') + sec('today','오늘') + sec('tomorrow','내일') + sec('week','이번 주') + sec('later','나중에') + sec('none','날짜 미정') + sec('done','끝낸 일');
   return h;
 }
+function setActsDone(ids, done){
+  for (const id of ids){
+    const c = S.byId[id]; if (!c || !(c.actions||[]).length) continue;
+    patch(id, {actions: c.actions.map(a => Object.assign({}, a, {done}))});
+  }
+  render();
+}
 
-// ---------------------------------------------------------------- assistant chat
 const SUGG = ['오늘 통화한 내용 정리해줘', '이번 주에 내가 해야 할 일 알려줘', '내일 청주 날씨 어때?', '견적서 보냈다고 거래처에 보낼 문자 써줘'];
 function viewChat(){
   const log = S.data.chat || [];
@@ -989,7 +1006,18 @@ document.addEventListener('click', e => {
     case 'openEvent': N.openEvent(d.ev); break;
     case 'shareSum': N.shareText(summaryText(S.byId[S.page.id])); break;
     case 'copySum': N.copyText(summaryText(S.byId[S.page.id])); break;
-    case 'todoMine': S.todoMine = d.k === '1'; render(); break;
+    case 'todoDone': S.todoDone = d.k === '1'; $('#view').scrollTop = 0; render(); break;
+    case 'doneCall': { const c = S.byId[d.id]; setActsDone([d.id], true); toast(`${c.contact} 통화 할 일을 확인했어요`); break; }
+    case 'undoCall': setActsDone([d.id], false); toast('남은 할 일로 되돌렸어요'); break;
+    case 'doneAll': {
+      const ids = S.calls.filter(c => (c.actions||[]).some(a => !a.done)).map(c => c.id);
+      const n = ids.reduce((k,id) => k + S.byId[id].actions.filter(a => !a.done).length, 0);
+      dialog(`<h3>남은 할 일 ${n}개를 모두 확인할까요?</h3><p style="color:var(--muted);margin:0">'확인한 할 일'에서 통화별로 되돌릴 수 있어요.</p>
+        <div class="btns"><button class="btn ghost" data-act="closeDlg">취소</button><button class="btn" id="okAll">모두 확인</button></div>`, dl => {
+        dl.querySelector('#okAll').onclick = () => { closeDialog(); setActsDone(ids, true); toast(`할 일 ${n}개를 확인했어요`); };
+      });
+      break;
+    }
     case 'ask': ask(d.q); break;
     case 'send': { const t = $('#chatin'); ask(t.value); break; }
     case 'chatClear': S.data.chat = []; saveData(); render(); break;
