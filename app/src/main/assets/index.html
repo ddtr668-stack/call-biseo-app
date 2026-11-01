@@ -242,7 +242,8 @@ window.__native = {
   openCall(id){ reloadCalls(); openCall(id); },
   launch(){ const id = N.takeLaunch(); if (id){ reloadCalls(); openCall(id); } },
   resumed(){ refresh(false); },
-  tasksChanged(){ S.set = JSON.parse(N.settings()); render(); }
+  tasksChanged(){ S.set = JSON.parse(N.settings()); render(); },
+  summaryDone(id){ reloadCalls(); summaryPopup(id); }
 };
 let reloadT = 0;
 
@@ -753,6 +754,8 @@ function viewSettings(){
     <div class="field"><label for="model">모델</label><div class="inl"><select id="model" data-set="model"><option value="">자동 선택</option>${(S.models||[]).concat(s.model && !(S.models||[]).includes(s.model) ? [s.model] : []).map(m => `<option ${m===s.model?'selected':''}>${esc(m)}</option>`).join('')}</select>
       <button class="btn ghost small" data-act="loadModels">불러오기</button></div><small>잘 모르겠으면 자동 선택에 두세요. 'flash'가 빠르고 저렴해요.</small></div>
     <div class="srow"><div class="l"><b>통화 끝나면 자동 요약</b><small>새 녹음이 생기면 바로 받아쓰고 요약해서 알림을 보내요</small></div>${tg('auto', s.auto)}</div>
+    <div class="srow"><div class="l"><b>요약 끝나면 팝업으로 보기</b><small>${p.overlay ? '다른 앱을 쓰고 있어도 화면 위에 요약 카드를 띄워요' : '화면 위 팝업 권한을 허용하면 다른 앱 위에도 카드로 떠요. 지금은 화면 위쪽 알림으로 보여요.'}</small></div>${tg('popup', s.popup)}</div>
+    ${s.popup && !p.overlay ? `<div class="srow"><div class="l"><b>다른 앱 위에 표시</b><small>설정 화면에서 '상규 통화비서'를 켜 주세요</small></div><button class="mini" data-act="perm" data-perm="overlay">허용</button></div>` : ''}
     <div class="srow"><div class="l"><b>와이파이에서만 요약</b><small>모바일 데이터를 아끼고 싶을 때</small></div>${tg('wifiOnly', s.wifiOnly)}</div>
     <div class="field"><label for="myinfo">내 소개 (요약 품질이 좋아져요)</label><textarea id="myinfo" rows="3" data-set="myInfo" placeholder="예: 이상규, ○○산업 영업팀. 주로 건설 자재(철근, 형강) 납품. 거래처는 현장 소장님들.">${esc(s.myInfo)}</textarea></div>
   </div></div>`;
@@ -826,6 +829,18 @@ function editActDialog(cid, aid){
     const del = d.querySelector('#adel');
     if (del) del.onclick = () => { patch(cid, {actions:(c.actions||[]).filter(x => x.id !== aid)}); closeDialog(); render(); };
   });
+}
+function summaryPopup(id){
+  const c = S.byId[id]; if (!c || c.status !== 'done') return;
+  if (S.page && S.page.kind === 'call' && S.page.id === id) return;
+  const acts = myActs(c);
+  dialog(`<div style="display:flex;align-items:center;gap:12px">${ava(c.contact)}<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:17px">${esc(c.contact)}</div>
+      <div style="font-size:12.5px;color:var(--muted)">${esc(c.company ? c.company + ', ' : '')}통화 요약이 끝났어요</div></div>
+      ${c.category ? `<span class="stamp ${CAT_TONE[c.category]==='green'?'':CAT_TONE[c.category]||'grey'}" style="min-width:40px;height:40px;font-size:13px">${esc(c.category)}</span>` : ''}</div>
+    <div style="font-size:18px;font-weight:800;margin:14px 0 8px;line-height:1.35">${esc(c.title)}</div>
+    <ul class="sum">${(c.summary||[]).slice(0,4).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    ${acts.length ? `<div style="border-top:1px solid var(--rule2);margin-top:6px;padding-top:8px">${acts.slice(0,3).map(a => `<div style="color:var(--green);font-weight:700;font-size:14px;padding:3px 0">✓ ${esc(a.title)} <span style="color:var(--muted);font-weight:500">(${esc(dateLabel(a.date, a.time))})</span></div>`).join('')}</div>` : ''}
+    <div class="btns"><button class="btn ghost" data-act="closeDlg">닫기</button><button class="btn" data-act="popOpen" data-id="${esc(id)}">자세히 보기</button></div>`);
 }
 function callMenu(){
   const c = S.byId[S.page.id];
@@ -909,6 +924,7 @@ document.addEventListener('click', e => {
     case 'perm': N.askPerm(d.perm); break;
     case 'guide': guide(); break;
     case 'closeDlg': closeDialog(); break;
+    case 'popOpen': closeDialog(); openCall(d.id); break;
     case 'pickAudio': N.pickAudio(); break;
     case 'sub': S.page.sub = d.k; renderPage(true); break;
     case 'star': { const c = S.byId[S.page.id]; patch(c.id, {star: !c.star}); renderPage(); break; }

@@ -22,7 +22,7 @@
      summary:['10월 납품분 세금계산서를 이번 주 금요일까지 발행해 달라고 요청함.','결제는 다음 달 10일 현금 결제 예정.'], actions:[{id:'c1', type:'todo', title:'10월분 세금계산서 발행', owner:'나', date:t(-4), time:'', note:'', done:true}], keywords:['세금계산서'], transcript:[], star:true},
     {id:'ms_6', uri:'content://m/6', file:'x', contact:'이정아 과장', ts: now - 8*D, dur: 75, status:'new'},
   ];
-  let settings = {apiKey:'', model:'', auto:true, wifiOnly:false, recPath:'Recordings/Call/,Call/', myInfo:'', calId:'', remindMin:'30', taskAccount:'', taskList:'', taskListName:''};
+  let settings = {apiKey:'', model:'', auto:true, wifiOnly:false, popup:true, recPath:'Recordings/Call/,Call/', myInfo:'', calId:'', remindMin:'30', taskAccount:'', taskList:'', taskListName:''};
   let data = '';
   const later = (id, st, body, ms) => setTimeout(() => window.__native.resolve(id, st, body), ms || 300);
   let audio = {uri:'', playing:false, pos:0, dur:0, speed:1};
@@ -38,7 +38,7 @@
     pickAudio(){}, settings: () => JSON.stringify(settings), setSetting: (k, v) => { settings[k] = v; },
     aiModels: id => later(id, 200, JSON.stringify(['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash-lite'])),
     ai: (id, body) => later(id, 200, JSON.stringify({answer:'이번 주에 하실 일은 2가지예요.\n- 대성건설 수정 견적서 메일 발송 (내일까지, 톤당 96만 원 기준)\n- 한빛철강 H형강 출고 일정 확인 후 회신 (어제까지였어요)', refs:['ms_1','ms_3']}), 900),
-    perms: () => JSON.stringify({audio:true, contacts:false, calendar:true, notif:true, battery:false}),
+    perms: () => JSON.stringify({audio:true, contacts:false, calendar:true, notif:true, battery:false, overlay:false}),
     askPerm(){}, openAppSettings(){},
     calendars: () => JSON.stringify([{id:3, name:'ddtr668@gmail.com', account:'ddtr668@gmail.com'},{id:5, name:'업무', account:'ddtr668@gmail.com'}]),
     addEvent: (id) => later(id, 200, '77'), openEvent(){}, eventExists: () => true,

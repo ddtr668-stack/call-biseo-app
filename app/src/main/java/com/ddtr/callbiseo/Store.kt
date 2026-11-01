@@ -15,6 +15,7 @@ object Prefs {
     fun model(ctx: Context): String = of(ctx).getString("model", "") ?: ""
     fun auto(ctx: Context): Boolean = of(ctx).getBoolean("auto", true)
     fun wifiOnly(ctx: Context): Boolean = of(ctx).getBoolean("wifiOnly", false)
+    fun popup(ctx: Context): Boolean = of(ctx).getBoolean("popup", true)
     fun recPaths(ctx: Context): List<String> =
         (of(ctx).getString("recPath", DEFAULT_PATHS) ?: DEFAULT_PATHS)
             .split(',').map { it.trim() }.filter { it.isNotEmpty() }

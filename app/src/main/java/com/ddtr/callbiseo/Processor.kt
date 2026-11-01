@@ -23,6 +23,7 @@ object Processor {
         private set
 
     const val CHANNEL = "summary"
+    const val CHANNEL_POP = "summary_pop"
 
     // ---------- finding recordings ----------
 
@@ -267,12 +268,22 @@ $transcriptRule
         val ch = NotificationChannel(CHANNEL, "통화 요약", NotificationManager.IMPORTANCE_DEFAULT)
         ch.description = "통화 녹음을 요약하면 알려 드려요"
         nm.createNotificationChannel(ch)
+        val pop = NotificationChannel(CHANNEL_POP, "통화 요약 (화면 위 알림)", NotificationManager.IMPORTANCE_HIGH)
+        pop.description = "화면 위 팝업 권한이 없을 때 요약을 화면 위쪽에 띄워요"
+        nm.createNotificationChannel(pop)
     }
 
     private fun notifyDone(ctx: Context, id: String) {
         val c = Store.get(ctx, id) ?: return
-        if (MainActivity.instance?.shown == true) return
+        if (MainActivity.instance?.shown == true) {
+            // 앱을 보고 있으면 앱 안에서 팝업
+            MainActivity.instance?.js("window.__native&&window.__native.summaryDone&&window.__native.summaryDone(${JSONObject.quote(id)})")
+            return
+        }
         ensureChannel(ctx)
+        val wantPop = Prefs.popup(ctx)
+        val overlay = wantPop && Popup.allowed(ctx)
+        if (overlay) Popup.show(ctx, c)
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
         val summary = c.optJSONArray("summary") ?: JSONArray()
         val lines = (0 until summary.length()).map { "• " + summary.optString(it) }
@@ -285,7 +296,7 @@ $transcriptRule
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val nid = 2000 + (id.hashCode() and 0xFFFF)
         val pi = PendingIntent.getActivity(ctx, nid, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val n = Notification.Builder(ctx, CHANNEL)
+        val n = Notification.Builder(ctx, if (wantPop && !overlay) CHANNEL_POP else CHANNEL)
             .setSmallIcon(R.drawable.ic_notif)
             .setContentTitle(title)
             .setContentText(lines.firstOrNull()?.removePrefix("• ") ?: "")

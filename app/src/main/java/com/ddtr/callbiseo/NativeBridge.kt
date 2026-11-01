@@ -137,7 +137,7 @@ class NativeBridge(private val act: MainActivity) {
     }
 
     // ---------- settings ----------
-    private val boolKeys = setOf("auto", "wifiOnly")
+    private val boolKeys = setOf("auto", "wifiOnly", "popup")
 
     @JavascriptInterface
     fun settings(): String {
@@ -146,6 +146,7 @@ class NativeBridge(private val act: MainActivity) {
         o.put("model", Prefs.model(ctx))
         o.put("auto", Prefs.auto(ctx))
         o.put("wifiOnly", Prefs.wifiOnly(ctx))
+        o.put("popup", Prefs.popup(ctx))
         o.put("recPath", prefs.getString("recPath", Prefs.DEFAULT_PATHS))
         o.put("myInfo", Prefs.myInfo(ctx))
         o.put("calId", prefs.getString("calId", ""))
@@ -202,6 +203,7 @@ class NativeBridge(private val act: MainActivity) {
             .put("calendar", Cal.allowed(ctx))
             .put("notif", Build.VERSION.SDK_INT < 33 || granted(Manifest.permission.POST_NOTIFICATIONS))
             .put("battery", pm?.isIgnoringBatteryOptimizations(ctx.packageName) ?: true)
+            .put("overlay", Popup.allowed(ctx))
             .toString()
     }
 
@@ -213,6 +215,13 @@ class NativeBridge(private val act: MainActivity) {
             "calendar" -> arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)
             "notif" -> if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.POST_NOTIFICATIONS) else emptyArray()
             "battery" -> { askBattery(); return }
+            "overlay" -> {
+                act.runOnUiThread {
+                    try { act.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.packageName))) }
+                    catch (e: Exception) { openAppSettings() }
+                }
+                return
+            }
             else -> emptyArray()
         }
         if (list.isEmpty()) return

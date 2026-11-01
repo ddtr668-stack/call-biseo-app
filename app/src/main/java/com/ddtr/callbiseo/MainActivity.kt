@@ -130,6 +130,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         shown = true
+        Popup.hide(this)
         // 앱을 열었으면 요약 알림은 확인한 것 → 알림과 아이콘 숫자 배지를 지운다
         try { getSystemService(android.app.NotificationManager::class.java)?.cancelAll() } catch (e: Exception) { }
         if (::web.isInitialized) {
