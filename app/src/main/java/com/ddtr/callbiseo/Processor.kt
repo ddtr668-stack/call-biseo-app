@@ -116,17 +116,21 @@ object Processor {
             uploaded = part.second
             var result: JSONObject? = null
             var limitErr: AiException? = null
+            var otherErr: AiException? = null
             for (m in listOf(model) + Gemini.backups(ctx, key, model)) {
                 try {
                     result = ask(key, m, part.first, call, ctx, full = true)
                     model = m
                     break
                 } catch (e: AiException) {
-                    if (e.code != 429 && e.code != 404) throw e
-                    limitErr = e
+                    // 한도(429)·없는 모델(404)·그 모델이 못 받는 요청(400)이면 다음 모델로
+                    if (!Gemini.switchable(e)) throw e
+                    if (e.code == 429) { if (limitErr == null) limitErr = e }
+                    else if (otherErr == null) otherErr = e
                 }
             }
-            if (result == null) throw limitErr ?: AiException(0, "요약하지 못했어요.", true)
+            // 모두 실패: 한도 때문이면 한도 오류(하루 한도면 다시 채워진 뒤 자동 요약)를, 아니면 실제 오류를 보여 준다
+            if (result == null) throw limitErr ?: otherErr ?: AiException(0, "요약하지 못했어요.", true)
             saveResult(ctx, id, result, model)
             notifyDone(ctx, id)
         } catch (e: AiException) {
@@ -135,7 +139,11 @@ object Processor {
                 Store.patch(ctx, id, JSONObject().put("status", "error").put("error", e.message ?: "")
                     .put("retry", true).put("retryAt", Gemini.nextReset()))
                 dailyLimitUntil = Gemini.nextReset()
-            } else fail(ctx, id, call, e.message ?: "오류", e.retry)
+            } else {
+                // 원인 확인용으로 어느 모델에서 난 오류인지 붙인다
+                val msg = (e.message ?: "오류") + (if (e.code == 400 && e.detail.isNotEmpty()) " [${e.detail}]" else "")
+                fail(ctx, id, call, msg, e.retry || e.code == 400)
+            }
         } catch (e: java.io.IOException) {
             fail(ctx, id, call, "인터넷 연결이 끊겼어요. 다시 시도할게요.", true)
         } catch (e: OutOfMemoryError) {
@@ -168,7 +176,15 @@ object Processor {
             if (e.code != 400 || e.message?.contains("API 키") == true) throw e
             // older/newer models may not accept the schema: ask for the same JSON in words
             body.getJSONObject("generationConfig").remove("responseSchema")
-            Gemini.generate(key, model, body)
+            try {
+                Gemini.generate(key, model, body)
+            } catch (e2: AiException) {
+                // 그래도 안 되면 녹음 형식 이름을 Gemini 공식 형식(audio/aac)으로 바꿔 한 번 더
+                val alt = Gemini.altAudio(audio)
+                if (e2.code != 400 || alt == null) throw e2
+                body.put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(alt).put(JSONObject().put("text", prompt)))))
+                Gemini.generate(key, model, body)
+            }
         }
         val text = Gemini.textOf(resp)
         val json = Gemini.parseJson(text)

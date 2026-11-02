@@ -204,7 +204,7 @@ class NativeBridge(private val act: MainActivity) {
                 var lastErr: AiException? = null
                 for (m in listOf(primary) + Gemini.backups(ctx, key, primary)) {
                     try { resp = Gemini.generate(key, m, req); used = m; break }
-                    catch (e: AiException) { if (e.code != 429 && e.code != 404) throw e; lastErr = e }
+                    catch (e: AiException) { if (!Gemini.switchable(e)) throw e; if (lastErr == null || e.code == 429) lastErr = e }
                 }
                 if (resp == null && req.has("tools")) {
                     // 검색 기능 한도일 수도 있으니 검색 없이 한 번 더

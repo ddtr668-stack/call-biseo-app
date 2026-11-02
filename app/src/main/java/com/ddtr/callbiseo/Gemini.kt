@@ -195,6 +195,17 @@ object Gemini {
         return out.take(3)
     }
 
+    /** 이 모델에서만 난 문제라 다른 모델로 바꿔 볼 만한 오류인지 (API 키 문제는 바꿔도 소용없음) */
+    fun switchable(e: AiException): Boolean =
+        e.code == 429 || e.code == 404 || (e.code == 400 && e.message?.contains("API 키") != true)
+
+    /** m4a 녹음을 공식 형식 이름(audio/aac)으로 다시 보낼 때 쓸 부분. 바꿀 게 없으면 null */
+    fun altAudio(part: JSONObject): JSONObject? {
+        val inl = part.optJSONObject("inlineData") ?: return null
+        if (inl.optString("mimeType") != "audio/m4a") return null
+        return JSONObject().put("inlineData", JSONObject().put("mimeType", "audio/aac").put("data", inl.optString("data")))
+    }
+
     fun textOf(resp: JSONObject): String {
         val cand = resp.optJSONArray("candidates")?.optJSONObject(0)
         if (cand == null) {
