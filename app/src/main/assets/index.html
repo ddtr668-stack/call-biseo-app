@@ -472,7 +472,10 @@ function searchText(c){
   return c._s;
 }
 function statusHtml(c){
-  if (c.status === 'working') return `<div class="state"><span class="spin"></span> 받아쓰고 요약하는 중…</div>`;
+  if (c.status === 'working'){
+    if (JSON.parse(N.workState()).current !== c.id) return `<div class="state">요약이 멈췄어요. 곧 다시 시작해요</div>`;
+    return `<div class="state"><span class="spin"></span> 받아쓰고 요약하는 중…</div>`;
+  }
   if (c.status === 'queued') return `<div class="state">요약 대기 중</div>`;
   if (c.status === 'error') return `<div class="state err">${esc(c.error || '요약하지 못했어요')}</div>`;
   if (c.status === 'new') return `<div class="state">요약 전</div>`;
@@ -489,7 +492,7 @@ function callRow(c){
     meta = `<div class="cmeta">${c.category ? `<span class="tag ${tone==='grey'?'':tone}">${esc(c.category)}</span>` : ''}
       ${acts.length ? `<span class="tag amber">할 일 ${acts.length}</span>` : ''}
       ${c.star ? '<span class="tag amber">중요</span>' : ''}<span class="num">${durLabel(c.dur)}</span></div>`;
-  } else if (c.status === 'new' || c.status === 'error' || c.status === 'skip'){
+  } else if (c.status === 'new' || c.status === 'error' || c.status === 'skip' || (c.status === 'working' && JSON.parse(N.workState()).current !== c.id)){
     meta = `<div class="cmeta"><button class="mini" data-act="queue" data-id="${esc(c.id)}">${c.status==='error'?'다시 요약':'요약하기'}</button><span class="num">${durLabel(c.dur)}</span></div>`;
   }
   return `<div class="crow" role="button" tabindex="0" data-act="open" data-id="${esc(c.id)}">${ava(c.contact)}
@@ -534,7 +537,7 @@ function pageCall(){
     h += `<div class="stamprow">${c.category ? `<span class="stamp ${tone==='green'?'':tone}">${esc(c.category)}</span>` : ''}
       ${c.mood ? `<span class="tag ${c.mood==='긍정'?'green':c.mood==='부정'?'red':''}">상대 반응 ${esc(c.mood)}</span>` : ''}</div>`;
   } else {
-    h += `<div class="sec">${statusHtml(c)}${c.status==='new'||c.status==='error'||c.status==='skip' ? `<div style="margin-top:10px"><button class="btn" data-act="queue" data-id="${esc(c.id)}">${c.status==='error'?'다시 요약하기':'지금 요약하기'}</button></div>`:''}</div>`;
+    h += `<div class="sec">${statusHtml(c)}${c.status==='new'||c.status==='error'||c.status==='skip'||(c.status==='working'&&JSON.parse(N.workState()).current!==c.id) ? `<div style="margin-top:10px"><button class="btn" data-act="queue" data-id="${esc(c.id)}">${c.status==='error'?'다시 요약하기':'지금 요약하기'}</button></div>`:''}</div>`;
   }
   if (!c.gone) h += `<div class="player"><button class="pp" data-act="play" aria-label="재생">${I.play}</button>
     <input type="range" id="seek" min="0" max="${Math.max(1,(c.dur||0)*1000)}" value="0" aria-label="재생 위치">

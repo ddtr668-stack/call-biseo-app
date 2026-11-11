@@ -87,8 +87,8 @@ class NativeBridge(private val act: MainActivity) {
         for (i in 0 until ids.length()) {
             val id = ids.optString(i)
             val c = Store.get(ctx, id) ?: continue
-            if (c.optString("status") == "working") continue
-            Store.patch(ctx, id, JSONObject().put("status", "queued").put("error", "").put("attempts", 0))
+            if (c.optString("status") == "working" && Processor.current == id) continue
+            Store.patch(ctx, id, JSONObject().put("status", "queued").put("error", "").put("attempts", 0).put("starts", 0))
         }
         when (Processor.canWork(ctx)) {
             "nokey" -> toast("설정에서 Gemini API 키를 먼저 넣어 주세요.")

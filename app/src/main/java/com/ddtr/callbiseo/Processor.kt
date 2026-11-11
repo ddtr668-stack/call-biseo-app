@@ -65,6 +65,15 @@ object Processor {
         val arr = JSONArray(Store.allJson(ctx))
         for (i in 0 until arr.length()) {
             val c = arr.optJSONObject(i) ?: continue
+            // 요약하다가 앱이 꺼져서 '요약하는 중'에 멈춘 통화: 다시 대기열로 (같은 통화가 3번 멈추면 포기)
+            if (c.optString("status") == "working" && c.optString("id") != current) {
+                val fields = if (c.optInt("starts") >= 3)
+                    JSONObject().put("status", "error").put("retry", false)
+                        .put("error", "요약하다가 여러 번 멈췄어요. 녹음이 너무 길거나 파일에 문제가 있을 수 있어요. '다시 요약'을 눌러 보세요.")
+                else JSONObject().put("status", "queued")
+                Store.patch(ctx, c.optString("id"), fields)
+                continue
+            }
             if (c.optString("status") == "error" && c.optBoolean("retry") &&
                 c.optInt("attempts") < 4 && c.optLong("retryAt") <= now
             ) Store.patch(ctx, c.optString("id"), JSONObject().put("status", "queued"))
@@ -104,7 +113,8 @@ object Processor {
         val call = Store.get(ctx, id) ?: return
         val key = Prefs.apiKey(ctx)
         current = id
-        Store.patch(ctx, id, JSONObject().put("status", "working").put("error", ""))
+        Store.patch(ctx, id, JSONObject().put("status", "working").put("error", "")
+            .put("starts", call.optInt("starts") + 1).put("workingAt", System.currentTimeMillis()))
         var uploaded: String? = null
         try {
             val bytes = Recordings.readBytes(ctx, call.optString("uri"))
@@ -150,6 +160,8 @@ object Processor {
             fail(ctx, id, call, "녹음이 너무 길어서 처리하지 못했어요.", false)
         } catch (e: Exception) {
             fail(ctx, id, call, "처리 중 오류: ${e.message ?: e.javaClass.simpleName}", false)
+        } catch (e: Throwable) {
+            fail(ctx, id, call, "처리 중 오류: ${e.javaClass.simpleName}", false)
         } finally {
             Gemini.deleteFile(key, uploaded)
             current = null
