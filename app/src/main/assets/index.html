@@ -869,6 +869,15 @@ function dialog(html, onMount){
   document.body.appendChild(d); if (onMount) onMount(d); return d;
 }
 function closeDialog(){ const d = document.querySelector('.scrim:last-of-type'); if (d){ d.remove(); return true; } return false; }
+function batteryGuide(){
+  dialog(`<h3>배터리 제한 없음으로 바꾸기</h3><div class="guide"><ol>
+    <li>아래 <b>설정 열기</b>를 누르면 상규 통화비서 앱 정보가 열려요</li>
+    <li><b>배터리</b>를 눌러요</li>
+    <li><b>제한 없음</b>을 골라요</li></ol>
+    <p style="color:var(--muted);font-size:13.5px;line-height:1.6">이렇게 해 두면 통화가 끝나자마자 요약되고, 요약하다가 앱이 꺼지는 일도 줄어요.<br>
+    더 확실하게 하려면 폰 <b>설정 › 배터리 › 백그라운드 사용 제한 › 절전 예외 앱</b>에 상규 통화비서를 추가하세요.</p></div>
+    <div class="btns"><button class="btn ghost" data-act="closeDlg">닫기</button><button class="btn" data-act="openAppSettings">설정 열기</button></div>`);
+}
 function guide(){
   S.data.recGuideSeen = true; saveData();
   dialog(`<h3>갤럭시 통화 자동 녹음 켜기</h3><div class="guide"><ol>
@@ -1013,7 +1022,8 @@ document.addEventListener('click', e => {
     case 'queue': N.queue(JSON.stringify([d.id])); break;
     case 'queueRecent': N.queue(JSON.stringify(S.calls.filter(c => c.status === 'new' && c.ts > Date.now() - 7*864e5).map(c => c.id))); break;
     case 'requeue': closeDialog(); N.queue(JSON.stringify([S.page.id])); break;
-    case 'perm': N.askPerm(d.perm); break;
+    case 'perm': if (d.perm === 'battery') batteryGuide(); else N.askPerm(d.perm); break;
+    case 'openAppSettings': closeDialog(); N.openAppSettings(); break;
     case 'guide': guide(); break;
     case 'closeDlg': closeDialog(); break;
     case 'skipThis': { closeDialog(); const c = S.byId[S.page.id]; addSkip({name: /\d{3}/.test(c.contact) ? '' : c.contact, number: c.number || ''}); break; }
