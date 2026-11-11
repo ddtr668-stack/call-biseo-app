@@ -370,6 +370,19 @@ function render(){
   renderNav();
   const v = $('#view');
   const keep = v.scrollTop;
+  // 검색창에 글자를 치는 중이면 검색창은 그대로 두고 아래 목록만 바꾼다 (한글 자모가 떨어지지 않게)
+  const ae = document.activeElement;
+  if ((S.tab === 'calls' || S.tab === 'people') && ae && (ae.id === 'q' || ae.id === 'pq') && v.contains(ae)){
+    const top = v.querySelector('.top'); const tmp = document.createElement('div');
+    tmp.innerHTML = S.tab === 'calls' ? viewCalls() : viewPeople();
+    const tTop = tmp.querySelector('.top');
+    if (top && tTop){
+      tTop.remove();
+      while (top.nextSibling) top.nextSibling.remove();
+      top.after(...tmp.childNodes);
+      renderPage(); return;
+    }
+  }
   if (S.tab === 'calls') v.innerHTML = viewCalls();
   else if (S.tab === 'people') v.innerHTML = viewPeople();
   else if (S.tab === 'todo') v.innerHTML = viewTodo();
@@ -1083,8 +1096,8 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('input', e => {
   const t = e.target;
-  if (t.id === 'q'){ S.q = t.value; clearTimeout(S.qT); S.qT = setTimeout(() => { const pos = t.selectionStart; render(); const n = $('#q'); if (n){ n.focus(); n.setSelectionRange(pos,pos); } }, 200); }
-  else if (t.id === 'pq'){ S.pq = t.value; clearTimeout(S.qT); S.qT = setTimeout(() => { const pos = t.selectionStart; render(); const n = $('#pq'); if (n){ n.focus(); n.setSelectionRange(pos,pos); } }, 200); }
+  if (t.id === 'q'){ S.q = t.value; clearTimeout(S.qT); S.qT = setTimeout(render, 150); }
+  else if (t.id === 'pq'){ S.pq = t.value; clearTimeout(S.qT); S.qT = setTimeout(render, 150); }
   else if (t.id === 'memo'){ const c = S.byId[S.page.id]; c.memo = t.value; c._s = null; clearTimeout(S.mT); S.mT = setTimeout(() => N.patchCall(c.id, JSON.stringify({memo: c.memo})), 400); }
   else if (t.id === 'cmemo'){ const n = S.page.name; S.data.contacts[n] = Object.assign({}, S.data.contacts[n], {memo: t.value}); saveData(); }
   else if (t.id === 'chatin'){ S.chatDraft = t.value; t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; }
