@@ -280,12 +280,16 @@ function reloadCalls(silent){
   S.calls.sort((a,b) => (b.ts||0) - (a.ts||0));
   S.byId = {}; S.calls.forEach(c => S.byId[c.id] = c);
   S.calls.forEach(c => { const f = String(c.contact||'').replace(/^(통화\s*녹음|통화|녹음)[\s_-]+/, ''); if (f) c.contact = f; });
+  S.byId[MANUAL] = manualCall();
   if (!silent) render();
 }
+const MANUAL = '__manual';
+function manualCall(){ return {id: MANUAL, manual: true, contact: '직접 추가한 할 일', ts: Date.now(), status: 'done', actions: ((S.data.manual||{}).actions) || []}; }
 let saveT = 0;
 function saveData(){ clearTimeout(saveT); saveT = setTimeout(() => N.saveData(JSON.stringify(S.data)), 250); }
 function patch(id, fields){
   const c = S.byId[id]; if (c) Object.assign(c, fields);
+  if (id === MANUAL){ S.data.manual = {actions: (c && c.actions) || []}; saveData(); return; }
   N.patchCall(id, JSON.stringify(fields));
 }
 async function refresh(showToast){
@@ -393,7 +397,7 @@ function render(){
   renderPage();
 }
 function renderNav(){
-  const late = S.calls.reduce((n, c) => n + openActs(c).filter(a => a.date && a.date <= today()).length, 0);
+  const late = S.calls.concat(S.byId[MANUAL] ? [S.byId[MANUAL]] : []).reduce((n, c) => n + openActs(c).filter(a => a.date && a.date <= today()).length, 0);
   const items = [['calls','통화',I.calls],['people','거래처',I.people],['todo','할 일',I.todo],['chat','비서',I.chat],['set','설정',I.set]];
   $('#nav').innerHTML = items.map(([k,l,ic]) =>
     `<button data-act="tab" data-k="${k}" class="${S.tab===k?'on':''}" aria-label="${l}">${ic}<span>${l}</span>${k==='todo'&&late?`<span class="dot">${late}</span>`:''}</button>`).join('');
@@ -581,10 +585,11 @@ function actHtml(c, a, showSrc){
       <div class="ad ${late?'late':''}">${a.type==='event'?'약속':'할 일'}, ${esc(dateLabel(a.date, a.time))}</div>${a.note?`<div class="ad">${esc(a.note)}</div>`:''}
       ${showSrc ? `<button class="src" data-act="open" data-id="${esc(c.id)}">${esc(c.contact)} 통화 ${shortWhen(c.ts)}</button>` : ''}
       <div class="ab">
-        ${sent.cal ? `<button class="reg ok" data-act="openEvent" data-ev="${esc(sent.cal)}">${I.cal}캘린더에 있음</button>`
+        ${sent.cal ? `<button class="reg ok" data-act="calMenu" data-id="${esc(c.id)}" data-a="${esc(a.id)}">${I.cal}캘린더에 있음</button>`
                    : `<button class="reg" data-act="toCal" data-id="${esc(c.id)}" data-a="${esc(a.id)}">${I.cal}캘린더</button>`}
-        ${sent.task ? `<span class="reg ok">${I.task}구글 할 일에 있음</span>`
+        ${sent.task ? `<button class="reg ok" data-act="taskMenu" data-id="${esc(c.id)}" data-a="${esc(a.id)}">${I.task}구글 할 일에 있음</button>`
                     : `<button class="reg" data-act="toTask" data-id="${esc(c.id)}" data-a="${esc(a.id)}">${I.task}구글 할 일</button>`}
+        <button class="reg" data-act="editAct" data-id="${esc(c.id)}" data-a="${esc(a.id)}">고치기</button>
       </div></div></div>`;
 }
 function summaryText(c){
@@ -663,16 +668,16 @@ function pageContact(){
 // ---------------------------------------------------------------- todo tab
 function viewTodo(){
   const showDone = !!S.todoDone;
-  const groups = S.calls.filter(c => (c.actions||[]).length).map(c => ({c, open:(c.actions||[]).filter(a => !a.done), done:(c.actions||[]).filter(a => a.done)}));
+  const groups = [S.byId[MANUAL]].filter(Boolean).concat(S.calls).filter(c => (c.actions||[]).length).map(c => ({c, open:(c.actions||[]).filter(a => !a.done), done:(c.actions||[]).filter(a => a.done)}));
   const openGroups = groups.filter(g => g.open.length);
   const totalOpen = openGroups.reduce((n,g) => n + g.open.length, 0);
   const totalDone = groups.reduce((n,g) => n + g.done.length, 0);
-  let h = `<div class="top"><div class="row"><h1>할 일</h1>${!showDone && totalOpen ? `<button class="btn small" data-act="doneAll">모두 확인</button>` : ''}</div>
+  let h = `<div class="top"><div class="row"><h1>할 일</h1><button class="btn ghost small" data-act="newTodo">+ 추가</button>${!showDone && totalOpen ? `<button class="btn small" data-act="doneAll">모두 확인</button>` : ''}</div>
     <div class="tsub">${totalOpen ? `통화 ${openGroups.length}건에서 남은 할 일 ${totalOpen}개` : '남은 할 일이 없어요'}</div></div>
     <div style="padding:0 16px"><div class="seg"><button class="${!showDone?'on':''}" data-act="todoDone" data-k="0">남은 할 일 ${totalOpen}</button><button class="${showDone?'on':''}" data-act="todoDone" data-k="1">확인한 할 일 ${totalDone}</button></div></div>`;
   const list = (showDone ? groups.filter(g => g.done.length) : openGroups).slice(0, showDone ? 60 : 500);
   if (!list.length) return h + (showDone ? `<div class="empty"><b>확인한 할 일이 없어요</b></div>`
-    : `<div class="empty"><b>모두 확인했어요</b>통화에서 "보내 드릴게요", "화요일에 뵙죠" 같은 말이 나오면 통화별로 여기에 정리돼요.</div>`);
+    : `<div class="empty"><b>모두 확인했어요</b>위의 '+ 추가'로 할 일을 직접 넣을 수도 있어요.<br>통화에서 "보내 드릴게요", "화요일에 뵙죠" 같은 말이 나오면 통화별로 여기에 정리돼요.</div>`);
   const t = today();
   for (const g of list){
     const c = g.c, acts = showDone ? g.done : g.open;
@@ -680,9 +685,10 @@ function viewTodo(){
     const comp = c.company || companyOf(c.contact);
     h += `<div class="tcard${late?' late':''}">
       <div class="thead">
-        <div class="tinfo" data-act="open" data-id="${esc(c.id)}" role="button" tabindex="0">${ava(c.contact)}
+        ${c.manual ? `<div class="tinfo"><div class="ava" style="background:var(--muted)">+</div><div class="cmain"><div class="cline1"><span class="cname">직접 추가한 할 일</span></div><div class="tcall">통화와 상관없이 넣은 할 일</div></div></div>`
+        : `<div class="tinfo" data-act="open" data-id="${esc(c.id)}" role="button" tabindex="0">${ava(c.contact)}
           <div class="cmain"><div class="cline1"><span class="cname">${esc(c.contact)}</span><span class="ccomp">${esc(comp)}</span></div>
-          <div class="tcall">${shortWhen(c.ts)} 통화${c.title ? `, ${esc(c.title)}` : ''}</div></div></div>
+          <div class="tcall">${shortWhen(c.ts)} 통화${c.title ? `, ${esc(c.title)}` : ''}</div></div></div>`}
         ${showDone ? `<button class="mini ghostmini" data-act="undoCall" data-id="${esc(c.id)}">되돌리기</button>`
                    : `<button class="mini" data-act="doneCall" data-id="${esc(c.id)}">확인 ${acts.length}</button>`}
       </div>
@@ -888,13 +894,17 @@ function guide(){
   render();
 }
 function editActDialog(cid, aid){
+  const fromTab = !cid;
+  if (fromTab) cid = MANUAL;
   const c = S.byId[cid]; if (!c) return;
   const isNew = !aid;
+  const names = fromTab ? [...new Set(S.calls.map(x => x.contact).filter(Boolean))].slice(0, 300) : [];
   const a = isNew ? {id:'a'+Date.now().toString(36), type:'todo', title:'', owner:'나', date:'', time:'', note:'', done:false} : (c.actions||[]).find(x => x.id === aid);
   if (!a) return;
   dialog(`<h3>${isNew?'할 일 추가':'할 일 고치기'}</h3>
     <div class="field"><label>종류</label><div class="seg" id="atype"><button data-v="todo" class="${a.type==='todo'?'on':''}">할 일</button><button data-v="event" class="${a.type==='event'?'on':''}">약속</button></div></div>
     <div class="field"><label for="atitle">내용</label><input id="atitle" value="${esc(a.title)}"></div>
+    ${fromTab ? `<div class="field"><label for="acontact">거래처 (선택)</label><input id="acontact" list="anames" placeholder="비워 두면 '직접 추가한 할 일'에 들어가요" autocomplete="off"><datalist id="anames">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>` : ''}
     <div class="field"><label>누가</label><div class="seg" id="aowner">${['나','상대','함께'].map(o => `<button data-v="${o}" class="${a.owner===o?'on':''}">${o}</button>`).join('')}</div></div>
     <div class="field" style="display:flex;gap:8px"><div style="flex:1.4"><label for="adate">날짜</label><input id="adate" type="date" value="${esc(a.date)}"></div><div style="flex:1"><label for="atime">시간</label><input id="atime" type="time" value="${esc(a.time)}"></div></div>
     <div class="field"><label for="anote">메모</label><input id="anote" value="${esc(a.note)}"></div>
@@ -906,12 +916,24 @@ function editActDialog(cid, aid){
         title: d.querySelector('#atitle').value.trim(), date: d.querySelector('#adate').value, time: d.querySelector('#atime').value, note: d.querySelector('#anote').value.trim()
       };
       if (!v.title){ toast('내용을 적어 주세요'); return; }
-      const acts = (c.actions||[]).slice();
+      let target = c;
+      if (fromTab){
+        const who = (d.querySelector('#acontact').value || '').trim();
+        const last = who && S.calls.find(x => x.contact === who);   // 그 거래처의 가장 최근 통화에 붙인다
+        if (last) target = last;
+        else if (who) v.note = (v.note ? v.note + ' / ' : '') + who;
+      }
+      const acts = (target.actions||[]).slice();
       if (isNew) acts.push(Object.assign(a, v)); else Object.assign(acts.find(x => x.id === aid), v);
-      patch(cid, {actions: acts}); c._s = null; closeDialog(); render();
+      patch(target.id, {actions: acts}); target._s = null; closeDialog(); render();
+      if (isNew) toast(target.manual ? '할 일을 추가했어요' : `${target.contact} 통화에 할 일을 추가했어요`);
     };
     const del = d.querySelector('#adel');
-    if (del) del.onclick = () => { patch(cid, {actions:(c.actions||[]).filter(x => x.id !== aid)}); closeDialog(); render(); };
+    if (del) del.onclick = async () => {
+      closeDialog();
+      await unsend(c, a, true, true);
+      patch(cid, {actions:(c.actions||[]).filter(x => x.id !== aid)}); render(); toast('할 일을 지웠어요');
+    };
   });
 }
 function summaryPopup(id){
@@ -983,14 +1005,44 @@ function setSent(c, aid, k, v){
   const acts = (c.actions||[]).map(a => a.id === aid ? Object.assign({}, a, {sent: Object.assign({}, a.sent||{}, {[k]: v})}) : a);
   patch(c.id, {actions: acts});
 }
+/** 캘린더 일정 / 구글 할 일에 넣은 것을 취소 */
+async function unsend(c, a, cal, task){
+  const sent = a.sent || {};
+  let ok = true;
+  if (cal && sent.cal){
+    if (N.deleteEvent(String(sent.cal))) setSent(c, a.id, 'cal', null); else ok = false;
+  }
+  if (task && sent.task){
+    const list = sent.taskList || S.set.taskList || '@default';
+    const r = await nreq('gRequest', 'DELETE', `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(list)}/tasks/${encodeURIComponent(sent.task)}`, '');
+    if (r.status === 200 || r.status === 204 || r.status === 404 || r.status === 410) setSent(c, a.id, 'task', null);
+    else { ok = false; if (r.status === -1) toast('인터넷 연결을 확인하세요.'); else if (r.status !== -2) toast('구글 할 일에서 빼지 못했어요'); }
+  }
+  return ok;
+}
+function calMenu(cid, aid){
+  const [c, a] = findAct(cid, aid); if (!a) return;
+  dialog(`<h3>캘린더에 넣은 일정</h3><p style="color:var(--muted);margin:0 0 4px">${esc(a.title)}</p>
+    <div class="btns"><button class="btn red" id="calDel">캘린더에서 빼기</button><span style="flex:1"></span><button class="btn ghost" data-act="closeDlg">닫기</button><button class="btn" data-act="openEvent" data-ev="${esc((a.sent||{}).cal)}">캘린더에서 보기</button></div>`, d => {
+    d.querySelector('#calDel').onclick = async () => { closeDialog(); const [c2, a2] = findAct(cid, aid); if (await unsend(c2, a2, true, false)) toast('캘린더에서 뺐어요'); else toast('캘린더에서 빼지 못했어요'); renderPage(); render(); };
+  });
+}
+function taskMenu(cid, aid){
+  const [c, a] = findAct(cid, aid); if (!a) return;
+  dialog(`<h3>구글 할 일에 넣은 할 일</h3><p style="color:var(--muted);margin:0 0 4px">${esc(a.title)}</p>
+    <div class="btns"><button class="btn ghost" data-act="closeDlg">닫기</button><button class="btn red" id="taskDel">구글 할 일에서 빼기</button></div>`, d => {
+    d.querySelector('#taskDel').onclick = async () => { closeDialog(); const [c2, a2] = findAct(cid, aid); if (await unsend(c2, a2, false, true)) toast('구글 할 일에서 뺐어요'); renderPage(); render(); };
+  });
+}
 async function toCal(cid, aid){
   const [c, a] = findAct(cid, aid); if (!a) return;
   if (!JSON.parse(N.perms()).calendar){ N.askPerm('calendar'); return; }
   if (!S.set.calId){ toast('설정에서 일정 넣을 캘린더를 먼저 골라 주세요.'); S.page = null; S.tab = 'set'; render(); return; }
   let date = a.date;
   if (!date){ editActDialog(cid, aid); toast('날짜를 정해 주세요'); return; }
-  const desc = `${c.contact}${c.company?` (${c.company})`:''} 통화에서 (${dayLabel(c.ts)} ${timeLabel(c.ts)})\n${a.note?a.note+'\n':''}\n${(c.summary||[]).map(s => '- ' + s).join('\n')}\n\n상규 통화비서`;
-  const title = a.title.includes(c.contact) || (c.company && a.title.includes(c.company)) ? a.title : `${a.title} (${c.contact})`;
+  const desc = c.manual ? `${a.note ? a.note + '\n\n' : ''}상규 통화비서`
+    : `${c.contact}${c.company?` (${c.company})`:''} 통화에서 (${dayLabel(c.ts)} ${timeLabel(c.ts)})\n${a.note?a.note+'\n':''}\n${(c.summary||[]).map(s => '- ' + s).join('\n')}\n\n상규 통화비서`;
+  const title = c.manual || a.title.includes(c.contact) || (c.company && a.title.includes(c.company)) ? a.title : `${a.title} (${c.contact})`;
   const r = await nreq('addEvent', JSON.stringify({calId: +S.set.calId, title, desc, date, time: a.time || '', minutes: 60, remind: +(S.set.remindMin ?? 30)}));
   if (r.status === 200){ setSent(c, aid, 'cal', r.body); toast('캘린더에 넣었어요'); renderPage(); render(); }
   else toast(r.body || '캘린더에 넣지 못했어요');
@@ -999,12 +1051,12 @@ async function toTask(cid, aid){
   const [c, a] = findAct(cid, aid); if (!a) return;
   if (!S.set.taskAccount){ toast('설정에서 구글 할 일을 먼저 연결해 주세요.'); S.page = null; S.tab = 'set'; render(); return; }
   const list = S.set.taskList || '@default';
-  const title = a.title.includes(c.contact) ? a.title : `${a.title} (${c.contact})`;
-  const notes = `${c.contact} 통화 ${dayLabel(c.ts)} ${timeLabel(c.ts)}${a.time ? `\n시간: ${a.time}` : ''}${a.note ? `\n${a.note}` : ''}\n\n${(c.summary||[]).slice(0,3).map(s => '- ' + s).join('\n')}`;
+  const title = c.manual || a.title.includes(c.contact) ? a.title : `${a.title} (${c.contact})`;
+  const notes = c.manual ? `${a.time ? `시간: ${a.time}\n` : ''}${a.note || ''}` : `${c.contact} 통화 ${dayLabel(c.ts)} ${timeLabel(c.ts)}${a.time ? `\n시간: ${a.time}` : ''}${a.note ? `\n${a.note}` : ''}\n\n${(c.summary||[]).slice(0,3).map(s => '- ' + s).join('\n')}`;
   const body = {title, notes};
   if (a.date) body.due = a.date + 'T00:00:00.000Z';
   const r = await nreq('gRequest', 'POST', `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(list)}/tasks`, JSON.stringify(body));
-  if (r.status === 200){ setSent(c, aid, 'task', JSON.parse(r.body).id || '1'); toast('구글 할 일에 넣었어요'); renderPage(); render(); }
+  if (r.status === 200){ setSent(c, aid, 'task', JSON.parse(r.body).id || '1'); setSent(S.byId[c.id], aid, 'taskList', list); toast('구글 할 일에 넣었어요'); renderPage(); render(); }
   else if (r.status === -2) toast('구글 권한을 허용한 뒤 다시 눌러 주세요.');
   else toast(r.status === -1 ? '인터넷 연결을 확인하세요.' : (r.body && r.body.length < 120 ? r.body : '구글 할 일에 넣지 못했어요'));
 }
@@ -1060,17 +1112,20 @@ document.addEventListener('click', e => {
       render(); break;
     }
     case 'editAct': editActDialog(d.id, d.a); break;
+    case 'newTodo': editActDialog(null, null); break;
+    case 'calMenu': calMenu(d.id, d.a); break;
+    case 'taskMenu': taskMenu(d.id, d.a); break;
     case 'addAct': editActDialog(d.id, null); break;
     case 'toCal': toCal(d.id, d.a); break;
     case 'toTask': toTask(d.id, d.a); break;
-    case 'openEvent': N.openEvent(d.ev); break;
+    case 'openEvent': closeDialog(); N.openEvent(d.ev); break;
     case 'shareSum': N.shareText(summaryText(S.byId[S.page.id])); break;
     case 'copySum': N.copyText(summaryText(S.byId[S.page.id])); break;
     case 'todoDone': S.todoDone = d.k === '1'; $('#view').scrollTop = 0; render(); break;
     case 'doneCall': { const c = S.byId[d.id]; setActsDone([d.id], true); toast(`${c.contact} 통화 할 일을 확인했어요`); break; }
     case 'undoCall': setActsDone([d.id], false); toast('남은 할 일로 되돌렸어요'); break;
     case 'doneAll': {
-      const ids = S.calls.filter(c => (c.actions||[]).some(a => !a.done)).map(c => c.id);
+      const ids = [S.byId[MANUAL]].concat(S.calls).filter(c => c && (c.actions||[]).some(a => !a.done)).map(c => c.id);
       const n = ids.reduce((k,id) => k + S.byId[id].actions.filter(a => !a.done).length, 0);
       dialog(`<h3>남은 할 일 ${n}개를 모두 확인할까요?</h3><p style="color:var(--muted);margin:0">'확인한 할 일'에서 통화별로 되돌릴 수 있어요.</p>
         <div class="btns"><button class="btn ghost" data-act="closeDlg">취소</button><button class="btn" id="okAll">모두 확인</button></div>`, dl => {

@@ -92,6 +92,13 @@ object Cal {
         } catch (e: Exception) { -1 }
     }
 
+    fun delete(ctx: Context, eventId: Long): Boolean {
+        if (!allowed(ctx)) return false
+        return try {
+            ctx.contentResolver.delete(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId), null, null) > 0
+        } catch (e: Exception) { false }
+    }
+
     fun exists(ctx: Context, eventId: Long): Boolean {
         if (!allowed(ctx)) return false
         return try {

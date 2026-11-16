@@ -45,7 +45,7 @@
     perms: () => JSON.stringify({audio:true, contacts:false, calendar:true, notif:true, battery:false, overlay:true}),
     askPerm(){}, openAppSettings(){},
     calendars: () => JSON.stringify([{id:3, name:'ddtr668@gmail.com', account:'ddtr668@gmail.com'},{id:5, name:'업무', account:'ddtr668@gmail.com'}]),
-    addEvent: (id) => later(id, 200, '77'), openEvent(){}, eventExists: () => true,
+    addEvent: (id) => later(id, 200, '77'), deleteEvent: () => true, openEvent(){}, eventExists: () => true,
     tasksConnect(){ settings.taskAccount = 'ddtr668@gmail.com'; window.__native.tasksChanged(); }, tasksDisconnect(){ settings.taskAccount=''; window.__native.tasksChanged(); },
     gRequest: (id, m, url) => later(id, 200, url.includes('/lists?') ? JSON.stringify({items:[{id:'L1', title:'내 할 일'},{id:'L2', title:'영업'}]}) : JSON.stringify({id:'T1'})),
     audioPlay: (u) => { audio = {uri:u, playing:true, pos:12000, dur:312000, speed:audio.speed}; return true; },

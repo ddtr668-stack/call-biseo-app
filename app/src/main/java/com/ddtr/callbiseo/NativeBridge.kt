@@ -350,6 +350,14 @@ class NativeBridge(private val act: MainActivity) {
     @JavascriptInterface
     fun eventExists(eventId: String): Boolean = eventId.toLongOrNull()?.let { Cal.exists(ctx, it) } ?: false
 
+    /** 캘린더에 넣은 일정 지우기 (이미 없으면 true) */
+    @JavascriptInterface
+    fun deleteEvent(eventId: String): Boolean {
+        val ev = eventId.toLongOrNull() ?: return true
+        if (!Cal.exists(ctx, ev)) return true
+        return Cal.delete(ctx, ev)
+    }
+
     // ---------- Google Tasks (구글 할 일) ----------
     @Volatile private var consentOpen = false
 
