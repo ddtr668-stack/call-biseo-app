@@ -27,6 +27,8 @@ object Popup {
     private var shownView: View? = null
     /** 지금 떠 있는 팝업이 '전화 올 때' 팝업인지 */
     private var shownIncoming = false
+    /** 팝업을 띄울 때마다 바뀌는 번호: 예전 팝업용 타이머가 새 팝업을 닫지 않게 */
+    private var shownSeq = 0
 
     fun allowed(ctx: Context): Boolean = Settings.canDrawOverlays(ctx)
 
@@ -40,6 +42,16 @@ object Popup {
     /** 통화가 끝나면 '전화 올 때' 팝업만 닫는다 (요약 팝업은 그대로) */
     fun hideIncoming(ctx: Context) {
         Handler(Looper.getMainLooper()).post { if (shownIncoming) hide(ctx) }
+    }
+
+    /** 전화를 받은 뒤 ms 뒤에 '전화 올 때' 팝업을 닫는다 (0이면 바로) */
+    fun hideIncomingAfter(ctx: Context, ms: Long) {
+        val h = Handler(Looper.getMainLooper())
+        h.post {
+            if (!shownIncoming) return@post
+            val seq = shownSeq
+            h.postDelayed({ if (shownIncoming && shownSeq == seq) hide(ctx) }, ms)
+        }
     }
 
     fun hide(ctx: Context) {
@@ -163,6 +175,7 @@ object Popup {
         wm.addView(holder, lp)
         shownView = holder
         shownIncoming = incoming
+        shownSeq++
 
         val screenH = ctx.resources.displayMetrics.heightPixels
         fun clampY(y: Int) = y.coerceIn(dp(24f), maxOf(dp(24f), screenH - holder.height - dp(24f)))

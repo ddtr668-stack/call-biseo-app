@@ -32,6 +32,11 @@ class IncomingReceiver : BroadcastReceiver() {
                     } finally { pending.finish() }
                 }.start()
             }
+            // 전화를 받으면: 설정한 시간(바로·5초·10초·20초) 뒤에 닫기, '통화 끝날 때'면 그대로
+            TelephonyManager.EXTRA_STATE_OFFHOOK -> {
+                val sec = Prefs.of(ctx).getString("incomingClose", "10") ?: "10"
+                sec.toIntOrNull()?.let { Popup.hideIncomingAfter(ctx, it * 1000L) }
+            }
             TelephonyManager.EXTRA_STATE_IDLE -> Popup.hideIncoming(ctx)
         }
     }

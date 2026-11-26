@@ -162,6 +162,7 @@ class NativeBridge(private val act: MainActivity) {
         o.put("wifiOnly", Prefs.wifiOnly(ctx))
         o.put("popup", Prefs.popup(ctx))
         o.put("incomingPopup", prefs.getBoolean("incomingPopup", true))
+        o.put("incomingClose", prefs.getString("incomingClose", "10"))
         o.put("popupPos", prefs.getString("popupPos", "bottom"))
         o.put("fontSize", prefs.getString("fontSize", "m"))
         o.put("skipList", Prefs.skipList(ctx))
