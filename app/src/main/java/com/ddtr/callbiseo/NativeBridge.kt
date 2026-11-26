@@ -151,7 +151,7 @@ class NativeBridge(private val act: MainActivity) {
     }
 
     // ---------- settings ----------
-    private val boolKeys = setOf("auto", "wifiOnly", "popup")
+    private val boolKeys = setOf("auto", "wifiOnly", "popup", "incomingPopup")
 
     @JavascriptInterface
     fun settings(): String {
@@ -161,6 +161,7 @@ class NativeBridge(private val act: MainActivity) {
         o.put("auto", Prefs.auto(ctx))
         o.put("wifiOnly", Prefs.wifiOnly(ctx))
         o.put("popup", Prefs.popup(ctx))
+        o.put("incomingPopup", prefs.getBoolean("incomingPopup", true))
         o.put("popupPos", prefs.getString("popupPos", "bottom"))
         o.put("fontSize", prefs.getString("fontSize", "m"))
         o.put("skipList", Prefs.skipList(ctx))
@@ -250,6 +251,7 @@ class NativeBridge(private val act: MainActivity) {
             .put("notif", Build.VERSION.SDK_INT < 33 || granted(Manifest.permission.POST_NOTIFICATIONS))
             .put("battery", pm?.isIgnoringBatteryOptimizations(ctx.packageName) ?: true)
             .put("overlay", Popup.allowed(ctx))
+            .put("phone", Incoming.allowed(ctx))
             .toString()
     }
 
@@ -258,6 +260,7 @@ class NativeBridge(private val act: MainActivity) {
         val list = when (kind) {
             "audio" -> arrayOf(if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE)
             "contacts" -> arrayOf(Manifest.permission.READ_CONTACTS)
+            "phone" -> arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_CONTACTS)
             "calendar" -> arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)
             "notif" -> if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.POST_NOTIFICATIONS) else emptyArray()
             "battery" -> { askBattery(); return }

@@ -25,23 +25,31 @@ import java.util.Calendar
 /** "다른 앱 위에 표시": a summary card that pops up over whatever is on screen when a call has been summarised. */
 object Popup {
     private var shownView: View? = null
+    /** 지금 떠 있는 팝업이 '전화 올 때' 팝업인지 */
+    private var shownIncoming = false
 
     fun allowed(ctx: Context): Boolean = Settings.canDrawOverlays(ctx)
 
-    fun show(ctx: Context, call: JSONObject) {
+    fun show(ctx: Context, call: JSONObject, incoming: Boolean = false) {
         val app = ctx.applicationContext
         Handler(Looper.getMainLooper()).post {
-            try { build(app, call) } catch (e: Exception) { }
+            try { build(app, call, incoming) } catch (e: Exception) { }
         }
+    }
+
+    /** 통화가 끝나면 '전화 올 때' 팝업만 닫는다 (요약 팝업은 그대로) */
+    fun hideIncoming(ctx: Context) {
+        Handler(Looper.getMainLooper()).post { if (shownIncoming) hide(ctx) }
     }
 
     fun hide(ctx: Context) {
         val v = shownView ?: return
         shownView = null
+        shownIncoming = false
         try { ctx.applicationContext.getSystemService(WindowManager::class.java)?.removeView(v) } catch (e: Exception) { }
     }
 
-    private fun build(ctx: Context, c: JSONObject) {
+    private fun build(ctx: Context, c: JSONObject, incoming: Boolean = false) {
         if (!allowed(ctx)) return
         hide(ctx)
         val wm = ctx.getSystemService(WindowManager::class.java) ?: return
@@ -91,7 +99,9 @@ object Popup {
         }
         card.addView(head)
         val company = c.optString("company")
-        card.addView(text(listOf(company, "통화 요약이 끝났어요").filter { it.isNotEmpty() }.joinToString(", "), 12.5f, muted, false, 1))
+        val sub = if (incoming) "📞 전화 왔어요 · 지난 통화 " + agoLabel(c.optLong("ts")) +
+            (if (c.optInt("_calls") > 1) " (통화 ${c.optInt("_calls")}번)" else "") else "통화 요약이 끝났어요"
+        card.addView(text(listOf(company, sub).filter { it.isNotEmpty() }.joinToString(", "), 12.5f, if (incoming) green else muted, incoming, 1))
 
         card.addView(text(c.optString("title"), 16.5f, ink, true, 2).apply { setPadding(0, dp(10f), 0, dp(4f)) })
 
@@ -101,13 +111,16 @@ object Popup {
         }
 
         val acts = c.optJSONArray("actions") ?: JSONArray()
-        val mine = (0 until acts.length()).mapNotNull { acts.optJSONObject(it) }.filter { it.optString("owner") != "상대" }
+        // 전화 올 때는 아직 안 끝난 할 일·약속만 (상대가 한 약속도 같이: 확인할 거리)
+        val mine = (0 until acts.length()).mapNotNull { acts.optJSONObject(it) }
+            .filter { if (incoming) !it.optBoolean("done") else it.optString("owner") != "상대" }
         if (mine.isNotEmpty()) {
             card.addView(View(ctx).apply { setBackgroundColor(rule) }, LinearLayout.LayoutParams(-1, dp(1f)).apply { topMargin = dp(12f); bottomMargin = dp(8f) })
             for (a in mine.take(3)) {
                 val kind = if (a.optString("type") == "event") "약속" else "할 일"
                 val whenTxt = whenLabel(a.optString("date"), a.optString("time"))
-                card.addView(text("✓  " + a.optString("title") + (if (whenTxt.isNotEmpty()) "  ($kind, $whenTxt)" else "  ($kind)"), 14f, green, true, 2)
+                val ownerTag = if (incoming && a.optString("owner") == "상대") "상대 약속 · " else ""
+                card.addView(text("✓  " + ownerTag + a.optString("title") + (if (whenTxt.isNotEmpty()) "  ($kind, $whenTxt)" else "  ($kind)"), 14f, green, true, 2)
                     .apply { setPadding(0, dp(3f), 0, 0) })
             }
             if (mine.size > 3) card.addView(text("외 ${mine.size - 3}건", 13f, muted))
@@ -149,6 +162,7 @@ object Popup {
         holder.alpha = 0f
         wm.addView(holder, lp)
         shownView = holder
+        shownIncoming = incoming
 
         val screenH = ctx.resources.displayMetrics.heightPixels
         fun clampY(y: Int) = y.coerceIn(dp(24f), maxOf(dp(24f), screenH - holder.height - dp(24f)))
@@ -156,7 +170,8 @@ object Popup {
         holder.post {
             val prefs = Prefs.of(ctx)
             val h = holder.height
-            lp.y = clampY(when (prefs.getString("popupPos", "bottom")) {
+            // 전화 올 때는 받기·끊기 버튼(아래쪽)을 가리지 않게 항상 위쪽에
+            lp.y = clampY(if (incoming) dp(48f) else when (prefs.getString("popupPos", "bottom")) {
                 "top" -> dp(48f)
                 "center" -> (screenH - h) / 2
                 "custom" -> (prefs.getFloat("popupY", 0.6f) * screenH).toInt()
@@ -184,12 +199,28 @@ object Popup {
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (moved) Prefs.of(ctx).edit().putString("popupPos", "custom")
+                    if (moved && !incoming) Prefs.of(ctx).edit().putString("popupPos", "custom")
                         .putFloat("popupY", lp.y.toFloat() / screenH).apply()
                     true
                 }
                 else -> false
             }
+        }
+    }
+
+    /** 지난 통화가 언제였는지: 오늘 오후 4:31 / 어제 / 3일 전 / 11월 2일 */
+    private fun agoLabel(ts: Long): String {
+        if (ts <= 0) return ""
+        val c = Calendar.getInstance().apply { timeInMillis = ts }
+        val t0 = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+        val days = ((t0.timeInMillis - ts) / 86_400_000L).toInt() + (if (ts < t0.timeInMillis) 1 else 0)
+        val h = c.get(Calendar.HOUR_OF_DAY); val m = c.get(Calendar.MINUTE)
+        val time = (if (h < 12) "오전 " else "오후 ") + ((h % 12).let { if (it == 0) 12 else it }) + ":%02d".format(m)
+        return when {
+            days <= 0 -> "오늘 $time"
+            days == 1 -> "어제 $time"
+            days < 7 -> "${days}일 전"
+            else -> "${c.get(Calendar.MONTH) + 1}월 ${c.get(Calendar.DAY_OF_MONTH)}일"
         }
     }
 

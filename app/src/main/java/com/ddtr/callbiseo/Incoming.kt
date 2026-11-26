@@ -1,0 +1,79 @@
+package com.ddtr.callbiseo
+
+import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.telephony.TelephonyManager
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * 전화가 올 때: 그 번호(또는 연락처 이름)와 했던 마지막 통화의 요약을 화면 위 팝업으로 띄운다.
+ * 통화가 끝나면(IDLE) 팝업을 닫는다.
+ */
+class IncomingReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != TelephonyManager.ACTION_PHONE_STATE_CHANGED) return
+        val ctx = context.applicationContext
+        when (intent.getStringExtra(TelephonyManager.EXTRA_STATE)) {
+            TelephonyManager.EXTRA_STATE_RINGING -> {
+                if (!Incoming.enabled(ctx) || !Popup.allowed(ctx)) return
+                @Suppress("DEPRECATION")
+                val number = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER) ?: return // 번호 없는 첫 방송은 무시
+                if (number.isBlank()) return
+                val pending = goAsync()
+                Thread {
+                    try {
+                        val c = Incoming.lastCallWith(ctx, number)
+                        if (c != null) Popup.show(ctx, c, incoming = true)
+                    } catch (e: Exception) {
+                    } finally { pending.finish() }
+                }.start()
+            }
+            TelephonyManager.EXTRA_STATE_IDLE -> Popup.hideIncoming(ctx)
+        }
+    }
+}
+
+object Incoming {
+    fun allowed(ctx: Context): Boolean =
+        listOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_CALL_LOG)
+            .all { ctx.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+
+    fun enabled(ctx: Context): Boolean = Prefs.of(ctx).getBoolean("incomingPopup", true) && allowed(ctx)
+
+    /** 0으로 시작하는 국내 번호로 맞춘 숫자 (+82 10 → 010) */
+    fun norm(n: String): String {
+        var d = n.filter { it.isDigit() }
+        if (d.startsWith("82") && d.length >= 11) d = "0" + d.substring(2)
+        return d
+    }
+
+    private fun same(a: String, b: String): Boolean {
+        val x = norm(a); val y = norm(b)
+        if (x.isEmpty() || y.isEmpty()) return false
+        if (x == y) return true
+        return x.length >= 8 && y.length >= 8 && x.takeLast(8) == y.takeLast(8)
+    }
+
+    /** 이 번호와 했던 통화 중 요약이 끝난 가장 최근 것. 없으면 null */
+    fun lastCallWith(ctx: Context, number: String): JSONObject? {
+        val name = Recordings.contactName(ctx, number)
+        val arr = JSONArray(Store.allJson(ctx))
+        var best: JSONObject? = null
+        var count = 0
+        for (i in 0 until arr.length()) {
+            val c = arr.optJSONObject(i) ?: continue
+            val hit = same(c.optString("number"), number) ||
+                (name != null && c.optString("contact") == name) ||
+                (Recordings.isNumber(c.optString("contact")) && same(c.optString("contact"), number))
+            if (!hit) continue
+            count++
+            if (c.optString("status") != "done") continue
+            if (best == null || c.optLong("ts") > best.optLong("ts")) best = c
+        }
+        return best?.let { JSONObject(it.toString()).put("_calls", count) }
+    }
+}
