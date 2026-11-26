@@ -91,10 +91,12 @@ class NativeBridge(private val act: MainActivity) {
             Store.patch(ctx, id, JSONObject().put("status", "queued").put("error", "").put("attempts", 0).put("starts", 0).put("busyHits", 0).put("waitNote", "").put("notBefore", 0))
         }
         Processor.pauseUntil = 0L
+        Processor.spendBlockUntil = 0L // 한도를 올렸을 수 있으니 바로 다시 해 본다
         when (Processor.canWork(ctx)) {
             "nokey" -> toast("설정에서 Gemini API 키를 먼저 넣어 주세요.")
             "offline" -> toast("인터넷이 연결되면 요약할게요.")
             "wifi" -> toast("와이파이에 연결되면 요약할게요.")
+            "spend" -> toast("이번 달 AI 지출 한도에 걸려 있어요.")
             "daily" -> toast("오늘 AI 사용량을 다 썼어요. 오후 5시쯤 한도가 채워지면 이어서 요약할게요.")
         }
         Processor.kick(ctx)

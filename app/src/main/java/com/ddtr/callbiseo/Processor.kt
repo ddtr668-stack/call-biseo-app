@@ -31,6 +31,8 @@ object Processor {
     @Volatile var holdUntil = 0L
     /** 분당 한도·AI 서버 혼잡: 이때까지 쉬었다가 대기열을 이어서 돌린다 (오류로 표시하지 않음) */
     @Volatile var pauseUntil = 0L
+    /** 월 지출 한도에 걸림: 이때까지 대기열을 쉬고, 그 뒤 한 번씩 다시 확인 (한도를 올리면 이어짐) */
+    @Volatile var spendBlockUntil = 0L
     @Volatile var current: String? = null
         private set
 
@@ -99,6 +101,7 @@ object Processor {
     fun canWork(ctx: Context): String? {
         if (Prefs.apiKey(ctx).isEmpty()) return "nokey"
         if (System.currentTimeMillis() < dailyLimitUntil) return "daily"
+        if (System.currentTimeMillis() < spendBlockUntil) return "spend"
         val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return null
         val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return "offline"
         if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return "offline"
@@ -170,6 +173,9 @@ object Processor {
             var result: JSONObject? = null
             var limitErr: AiException? = null
             var otherErr: AiException? = null
+            var tried = 0
+            var all429 = true
+            var anyQuotaId = false
             for (m in listOf(model) + Gemini.backups(ctx, key, model)) {
                 try {
                     result = ask(key, m, part.first, call, ctx, full = true)
@@ -177,17 +183,29 @@ object Processor {
                     break
                 } catch (e: AiException) {
                     // 한도(429)·없는 모델(404)·그 모델이 못 받는 요청(400)이면 다음 모델로
+                    if (e.spend) throw e // 지출 한도: 다른 모델도 똑같이 막힘
                     if (!Gemini.switchable(e)) throw e
+                    tried++
+                    if (e.code != 429) all429 = false
+                    if (e.code == 429 && Regex("PerMinute|PerDay|PerProject|PerModel").containsMatchIn(e.detail)) anyQuotaId = true
                     if (e.code == 429) { if (limitErr == null) limitErr = e }
                     else if (otherErr == null) otherErr = e
                 }
             }
             // 모두 실패: 한도 때문이면 한도 오류(하루 한도면 다시 채워진 뒤 자동 요약)를, 아니면 실제 오류를 보여 준다
+            // 분당 한도는 모델마다 따로라서, 모든 모델이 이유 없이 429면 프로젝트 전체가 막힌 것(지출 한도·결제)
+            if (result == null && tried >= 2 && all429 && !anyQuotaId)
+                throw AiException(429, Gemini.SPEND_TEXT, true, spend = true, detail = limitErr?.detail ?: "")
             if (result == null) throw limitErr ?: otherErr ?: AiException(0, "요약하지 못했어요.", true)
             saveResult(ctx, id, result, model)
             notifyDone(ctx, id)
         } catch (e: AiException) {
-            if (!e.daily && (e.code == 429 || e.code >= 500)) {
+            if (e.spend) {
+                // 지출 한도: 오류로 띄우지 않고 대기열에 그대로, 30분마다 다시 확인
+                Store.patch(ctx, id, JSONObject().put("status", "queued").put("error", "")
+                    .put("waitNote", "지출 한도에 걸려 기다리는 중"))
+                spendBlockUntil = System.currentTimeMillis() + 30 * 60_000L
+            } else if (!e.daily && (e.code == 429 || e.code >= 500)) {
                 // 분당 한도·서버 혼잡: 오류로 띄우지 않고 대기열에 두었다가 잠시 뒤 자동으로 다시 요약
                 val hits = call.optInt("busyHits") + 1
                 val waitMs = maxOf(e.waitSec * 1000L + 3000L, minOf(hits, 5) * 60_000L)

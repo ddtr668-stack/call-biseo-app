@@ -11,7 +11,8 @@ class AiException(
     val code: Int, message: String, val retry: Boolean = false,
     /** 하루 무료 한도를 다 쓴 경우 */ val daily: Boolean = false,
     /** 서버가 알려준 대기 시간(초), 모르면 0 */ val waitSec: Int = 0,
-    /** 원인 확인용: 모델, 한도 종류 */ var detail: String = ""
+    /** 원인 확인용: 모델, 한도 종류 */ var detail: String = "",
+    /** 프로젝트 월 지출 한도·결제 문제로 모든 모델이 막힌 경우 */ val spend: Boolean = false
 ) : Exception(message)
 
 /** Google Gemini API over plain HTTPS (generateContent + Files API). */
@@ -65,6 +66,10 @@ object Gemini {
                 if (delay.endsWith("s")) waitSec = delay.removeSuffix("s").toDoubleOrNull()?.toInt() ?: 0
             }
         } catch (e: Exception) { }
+        if (r.code == 429 && quotaId.isEmpty() && SPEND_WORDS.containsMatchIn(msg)) {
+            // 월 지출 한도(spend cap)·선불 크레딧 소진: 모델을 바꿔도, 기다려도 안 풀린다
+            return AiException(429, SPEND_TEXT, true, spend = true, detail = msg.take(160))
+        }
         if (r.code == 429) {
             val free = quotaId.contains("FreeTier", true) || msg.contains("free", true)
             val daily = quotaId.contains("PerDay", true)
@@ -86,6 +91,9 @@ object Gemini {
         }
         return AiException(r.code, friendly, r.code >= 500)
     }
+
+    val SPEND_WORDS = Regex("spend|budget|billing|prepay|prepaid|credits", RegexOption.IGNORE_CASE)
+    const val SPEND_TEXT = "이번 달 AI 지출 한도에 도달해서 요약이 멈췄어요. AI Studio › 지출에서 한도를 올리면 바로 이어서 요약해요."
 
     /** 무료 한도가 다시 채워지는 때: 미국 태평양 시간 자정 */
     fun nextReset(): Long {
@@ -160,7 +168,7 @@ object Gemini {
         var tries = 0
         while ((r.code == 429 || r.code == 503 || r.code == 500) && tries < 2) {
             val e = errorOf(r)
-            if (e.daily) break
+            if (e.daily || e.spend) break
             val wait = if (e.waitSec in 1..40) e.waitSec * 1000L + 1500 else (if (tries == 0) 8_000L else 20_000L)
             Thread.sleep(wait)
             r = http("POST", "$BASE/v1beta/models/$model:generateContent", key, bytes)
