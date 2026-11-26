@@ -88,8 +88,9 @@ class NativeBridge(private val act: MainActivity) {
             val id = ids.optString(i)
             val c = Store.get(ctx, id) ?: continue
             if (c.optString("status") == "working" && Processor.current == id) continue
-            Store.patch(ctx, id, JSONObject().put("status", "queued").put("error", "").put("attempts", 0).put("starts", 0))
+            Store.patch(ctx, id, JSONObject().put("status", "queued").put("error", "").put("attempts", 0).put("starts", 0).put("busyHits", 0).put("waitNote", ""))
         }
+        Processor.pauseUntil = 0L
         when (Processor.canWork(ctx)) {
             "nokey" -> toast("설정에서 Gemini API 키를 먼저 넣어 주세요.")
             "offline" -> toast("인터넷이 연결되면 요약할게요.")
@@ -113,6 +114,7 @@ class NativeBridge(private val act: MainActivity) {
     fun workState(): String = JSONObject()
         .put("current", Processor.current ?: "")
         .put("block", Processor.canWork(ctx) ?: "")
+        .put("pauseUntil", Processor.pauseUntil)
         .put("canRead", Recordings.canRead(ctx))
         .toString()
 

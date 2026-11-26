@@ -158,12 +158,15 @@ object Gemini {
     fun generate(key: String, model: String, body: JSONObject): JSONObject {
         val bytes = body.toString().toByteArray(Charsets.UTF_8)
         var r = http("POST", "$BASE/v1beta/models/$model:generateContent", key, bytes)
-        if (r.code == 429) {
+        // 분당 한도·서버 혼잡이면 조금씩 더 기다리며 두 번 더 해 본다
+        var tries = 0
+        while ((r.code == 429 || r.code == 503 || r.code == 500) && tries < 2) {
             val e = errorOf(r)
-            if (!e.daily && e.waitSec in 1..20) {
-                Thread.sleep(e.waitSec * 1000L + 1500)
-                r = http("POST", "$BASE/v1beta/models/$model:generateContent", key, bytes)
-            }
+            if (e.daily) break
+            val wait = if (e.waitSec in 1..40) e.waitSec * 1000L + 1500 else (if (tries == 0) 8_000L else 20_000L)
+            Thread.sleep(wait)
+            r = http("POST", "$BASE/v1beta/models/$model:generateContent", key, bytes)
+            tries++
         }
         if (r.code != 200) throw errorOf(r).also { it.detail = model + (if (it.detail.isNotEmpty()) ", " + it.detail else "") }
         return JSONObject(r.body)

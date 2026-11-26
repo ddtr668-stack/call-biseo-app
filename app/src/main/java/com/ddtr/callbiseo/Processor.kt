@@ -23,6 +23,8 @@ object Processor {
     @Volatile var dailyLimitUntil = 0L
     /** 비서에게 질문하는 동안은 요약을 잠깐 쉬어서 한도를 비서에게 양보 */
     @Volatile var holdUntil = 0L
+    /** 분당 한도·AI 서버 혼잡: 이때까지 쉬었다가 대기열을 이어서 돌린다 (오류로 표시하지 않음) */
+    @Volatile var pauseUntil = 0L
     @Volatile var current: String? = null
         private set
 
@@ -74,11 +76,19 @@ object Processor {
                 Store.patch(ctx, c.optString("id"), fields)
                 continue
             }
+            // 분당 한도·서버 혼잡으로 실패한 통화는 기다릴 필요 없이 바로 다시 대기열로 (예전 버전에서 남은 오류 포함)
+            if (c.optString("status") == "error" && isBusyError(c.optString("error"))) {
+                Store.patch(ctx, c.optString("id"), JSONObject().put("status", "queued").put("error", "").put("attempts", 0))
+                continue
+            }
             if (c.optString("status") == "error" && c.optBoolean("retry") &&
                 c.optInt("attempts") < 4 && c.optLong("retryAt") <= now
             ) Store.patch(ctx, c.optString("id"), JSONObject().put("status", "queued"))
         }
     }
+
+    fun isBusyError(msg: String): Boolean =
+        msg.contains("1분 동안") || msg.contains("AI 서버가 바빠요")
 
     fun canWork(ctx: Context): String? {
         if (Prefs.apiKey(ctx).isEmpty()) return "nokey"
@@ -100,10 +110,10 @@ object Processor {
         var guard = 0
         while (guard++ < 200) {
             if (canWork(ctx) != null) break
-            while (System.currentTimeMillis() < holdUntil) Thread.sleep(1000)
+            while (System.currentTimeMillis() < holdUntil || System.currentTimeMillis() < pauseUntil) Thread.sleep(1000)
             val id = Store.nextQueued(ctx) ?: break
             processOne(ctx, id)
-            Thread.sleep(4000) // 무료 한도(분당 횟수)에 덜 걸리게 간격 두기
+            Thread.sleep(6000) // 분당 한도에 덜 걸리게 간격 두기
         }
     }
 
@@ -144,7 +154,17 @@ object Processor {
             saveResult(ctx, id, result, model)
             notifyDone(ctx, id)
         } catch (e: AiException) {
-            if (e.daily) {
+            if (!e.daily && (e.code == 429 || e.code >= 500)) {
+                // 분당 한도·서버 혼잡: 오류로 띄우지 않고 대기열에 두었다가 잠시 뒤 자동으로 다시 요약
+                val hits = call.optInt("busyHits") + 1
+                val waitMs = maxOf(e.waitSec * 1000L + 3000L, minOf(hits, 5) * 60_000L)
+                if (hits >= 12) fail(ctx, id, call, "AI가 계속 바빠서 요약하지 못했어요. 나중에 자동으로 다시 해요.", true)
+                else {
+                    Store.patch(ctx, id, JSONObject().put("status", "queued").put("error", "").put("busyHits", hits)
+                        .put("waitNote", "AI가 잠깐 바빠서 곧 이어서 요약해요"))
+                    pauseUntil = System.currentTimeMillis() + waitMs
+                }
+            } else if (e.daily) {
                 // 하루 한도: 다시 채워질 때까지 기다렸다가 자동으로 이어서 요약 (시도 횟수는 세지 않음)
                 Store.patch(ctx, id, JSONObject().put("status", "error").put("error", e.message ?: "")
                     .put("retry", true).put("retryAt", Gemini.nextReset()))
@@ -299,7 +319,7 @@ $transcriptRule
             )
         }
         val fields = JSONObject()
-            .put("status", "done").put("error", "").put("retry", false).put("attempts", 0)
+            .put("status", "done").put("error", "").put("retry", false).put("attempts", 0).put("busyHits", 0).put("waitNote", "")
             .put("title", r.optString("title").trim())
             .put("category", r.optString("category", "기타"))
             .put("company", r.optString("company").trim())

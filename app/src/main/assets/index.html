@@ -432,6 +432,9 @@ function viewCalls(){
   else if (queued && st.block === 'offline') h += `<div class="note warn">인터넷이 연결되면 통화 ${queued}개를 요약할게요.</div>`;
   else if (queued && st.block === 'daily') h += `<div class="note warn">오늘 쓸 수 있는 AI 사용량을 다 써서 통화 ${queued}개가 기다리고 있어요. 매일 오후 5시쯤 한도가 채워지면 이어서 요약해요.</div>`;
   else if (queued && st.block === 'wifi') h += `<div class="note warn">와이파이에 연결되면 통화 ${queued}개를 요약할게요. (설정에서 바꿀 수 있어요)</div>`;
+  if (queued && !st.block && st.pauseUntil > Date.now()) h += `<div class="note">AI가 잠깐 바빠서 쉬는 중이에요. 곧 통화 ${queued}개를 이어서 요약해요.</div>`;
+  const failed = S.calls.filter(c => c.status === 'error');
+  if (failed.length && S.set.apiKey) h += `<div class="note warn">요약하지 못한 통화가 ${failed.length}개 있어요.<div class="acts"><button class="btn small" data-act="queueFailed">모두 다시 요약</button></div></div>`;
   const fresh = S.calls.filter(c => c.status === 'new' && c.ts > Date.now() - 7*864e5);
   if (fresh.length && S.set.apiKey) h += `<div class="note">아직 요약하지 않은 최근 7일 통화가 ${fresh.length}개 있어요.<div class="acts"><button class="btn small" data-act="queueRecent">모두 요약하기</button></div></div>`;
 
@@ -480,7 +483,7 @@ function statusHtml(c){
     if (JSON.parse(N.workState()).current !== c.id) return `<div class="state">요약이 멈췄어요. 곧 다시 시작해요</div>`;
     return `<div class="state"><span class="spin"></span> 받아쓰고 요약하는 중…</div>`;
   }
-  if (c.status === 'queued') return `<div class="state">요약 대기 중</div>`;
+  if (c.status === 'queued') return `<div class="state">${c.waitNote ? esc(c.waitNote) : '요약 대기 중'}</div>`;
   if (c.status === 'error') return `<div class="state err">${esc(c.error || '요약하지 못했어요')}</div>`;
   if (c.status === 'new') return `<div class="state">요약 전</div>`;
   if (c.status === 'skip') return `<div class="state">요약 제외한 번호예요</div>`;
@@ -1072,6 +1075,10 @@ document.addEventListener('click', e => {
     case 'open': openCall(d.id); break;
     case 'back': goBack(); break;
     case 'queue': N.queue(JSON.stringify([d.id])); break;
+    case 'queueFailed': {
+      const ids = S.calls.filter(c => c.status === 'error').map(c => c.id);
+      N.queue(JSON.stringify(ids)); toast(`통화 ${ids.length}개를 차례로 다시 요약할게요`); reloadCalls(); break;
+    }
     case 'queueRecent': N.queue(JSON.stringify(S.calls.filter(c => c.status === 'new' && c.ts > Date.now() - 7*864e5).map(c => c.id))); break;
     case 'requeue': closeDialog(); N.queue(JSON.stringify([S.page.id])); break;
     case 'perm': if (d.perm === 'battery') batteryGuide(); else N.askPerm(d.perm); break;
