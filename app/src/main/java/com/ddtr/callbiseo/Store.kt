@@ -182,8 +182,17 @@ object Store {
 
     /** Oldest call waiting to be summarised. */
     fun nextQueued(ctx: Context): String? = synchronized(lock) {
-        load(ctx).values.filter { it.optString("status") == "queued" }
-            .minByOrNull { it.optLong("ts") }?.optString("id")
+        // 최근 통화부터 (오래된 통화 하나가 막혀도 새 통화는 바로 요약되게), 잠시 미뤄 둔 통화는 건너뜀
+        val now = System.currentTimeMillis()
+        load(ctx).values.filter { it.optString("status") == "queued" && it.optLong("notBefore") <= now }
+            .maxByOrNull { it.optLong("ts") }?.optString("id")
+    }
+
+    /** 미뤄 둔 통화 중 가장 빨리 차례가 오는 것까지 남은 시간(ms). 없으면 0 */
+    fun soonestWait(ctx: Context): Long = synchronized(lock) {
+        val now = System.currentTimeMillis()
+        load(ctx).values.filter { it.optString("status") == "queued" && it.optLong("notBefore") > now }
+            .minOfOrNull { it.optLong("notBefore") - now } ?: 0L
     }
 
     /** Restore from a backup: keep what is already here, add or update the rest. */

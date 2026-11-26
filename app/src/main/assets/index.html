@@ -432,6 +432,9 @@ function viewCalls(){
   else if (queued && st.block === 'offline') h += `<div class="note warn">인터넷이 연결되면 통화 ${queued}개를 요약할게요.</div>`;
   else if (queued && st.block === 'daily') h += `<div class="note warn">오늘 쓸 수 있는 AI 사용량을 다 써서 통화 ${queued}개가 기다리고 있어요. 매일 오후 5시쯤 한도가 채워지면 이어서 요약해요.</div>`;
   else if (queued && st.block === 'wifi') h += `<div class="note warn">와이파이에 연결되면 통화 ${queued}개를 요약할게요. (설정에서 바꿀 수 있어요)</div>`;
+  const nowWorking = st.current && S.byId[st.current];
+  if (queued && !st.block && nowWorking) h += `<div class="note"><span class="spin"></span> ${esc(nowWorking.contact || '통화')} 요약 중… (대기 ${queued}개)</div>`;
+  else if (queued && !st.block && !(st.pauseUntil > Date.now())) h += `<div class="note warn">요약을 기다리는 통화가 ${queued}개 있어요.<div class="acts"><button class="btn small" data-act="kickQueue">지금 요약 시작</button></div></div>`;
   if (queued && !st.block && st.pauseUntil > Date.now()) h += `<div class="note">AI가 잠깐 바빠서 쉬는 중이에요. 곧 통화 ${queued}개를 이어서 요약해요.</div>`;
   const failed = S.calls.filter(c => c.status === 'error');
   if (failed.length && S.set.apiKey) h += `<div class="note warn">요약하지 못한 통화가 ${failed.length}개 있어요.<div class="acts"><button class="btn small" data-act="queueFailed">모두 다시 요약</button></div></div>`;
@@ -1075,6 +1078,10 @@ document.addEventListener('click', e => {
     case 'open': openCall(d.id); break;
     case 'back': goBack(); break;
     case 'queue': N.queue(JSON.stringify([d.id])); break;
+    case 'kickQueue': {
+      const ids = S.calls.filter(c => c.status === 'queued').map(c => c.id);
+      N.queue(JSON.stringify(ids)); toast('요약을 시작할게요'); reloadCalls(); break;
+    }
     case 'queueFailed': {
       const ids = S.calls.filter(c => c.status === 'error').map(c => c.id);
       N.queue(JSON.stringify(ids)); toast(`통화 ${ids.length}개를 차례로 다시 요약할게요`); reloadCalls(); break;
@@ -1220,7 +1227,7 @@ try { loadAll(); render(); }
 catch (e) { document.getElementById('view').innerHTML = `<div class="empty"><b>화면을 여는 중 오류가 났어요</b>${esc(String(e && e.stack || e))}</div>`; }
 refresh(false);
 window.__native.launch();
-setInterval(() => { if (S.calls.some(c => c.status === 'queued' || c.status === 'working') && !S.page && S.tab === 'calls') render(); }, 5000);
+setInterval(() => { if (S.calls.some(c => c.status === 'queued' || c.status === 'working') && !S.page && S.tab === 'calls' && !(document.activeElement && document.activeElement.id === 'q')) reloadCalls(); }, 5000);
 </script>
 </body>
 </html>

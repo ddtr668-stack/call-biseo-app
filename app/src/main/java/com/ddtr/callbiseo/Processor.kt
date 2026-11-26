@@ -18,7 +18,13 @@ import java.util.concurrent.Future
 
 /** Finds new recordings and turns each one into transcript + summary + actions with Gemini, one at a time. */
 object Processor {
-    private val exec = Executors.newSingleThreadExecutor()
+    @Volatile private var exec = Executors.newSingleThreadExecutor()
+    /** 지금 요약 중인 통화를 언제 시작했는지 (멈춤 감지용) */
+    @Volatile var busySince = 0L
+    /** 대기열 작업이 마지막으로 움직인 때 (멈춤 감지용) */
+    @Volatile var beat = 0L
+    /** 작업 줄 번호: 멈춘 줄을 버리고 새 줄을 만들면 바뀐다 (버린 줄은 알아서 그만둠) */
+    @Volatile private var gen = 0
     /** 하루 한도에 걸리면 그때까지는 대기열을 돌리지 않는다 */
     @Volatile var dailyLimitUntil = 0L
     /** 비서에게 질문하는 동안은 요약을 잠깐 쉬어서 한도를 비서에게 양보 */
@@ -103,26 +109,53 @@ object Processor {
     /** Work through the queue in the background. */
     fun kick(ctx: Context): Future<*> {
         val app = ctx.applicationContext
+        unstick(app)
         return exec.submit { drain(app) }
     }
 
+    /**
+     * 통화 하나가 15분 넘게 끝나지 않으면(응답 없는 연결 등) 그 통화는 뒤로 미루고
+     * 새 작업 줄을 만들어 나머지 통화가 계속 요약되게 한다.
+     */
+    @Synchronized
+    private fun unstick(ctx: Context) {
+        val id = current ?: return
+        if (busySince == 0L || System.currentTimeMillis() - busySince < 15 * 60_000L) return
+        Store.patch(ctx, id, JSONObject().put("status", "queued").put("error", "")
+            .put("notBefore", System.currentTimeMillis() + 30 * 60_000L)
+            .put("waitNote", "요약이 너무 오래 걸려서 다른 통화 먼저 하고 다시 해요"))
+        gen++
+        try { exec.shutdown() } catch (e: Exception) { }
+        exec = Executors.newSingleThreadExecutor()
+        current = null
+        busySince = 0L
+    }
+
     private fun drain(ctx: Context) {
+        val myGen = gen
         var guard = 0
-        while (guard++ < 200) {
+        while (guard++ < 400 && myGen == gen) {
             if (canWork(ctx) != null) break
+            beat = System.currentTimeMillis()
             while (System.currentTimeMillis() < holdUntil || System.currentTimeMillis() < pauseUntil) Thread.sleep(1000)
-            val id = Store.nextQueued(ctx) ?: break
-            processOne(ctx, id)
+            val id = Store.nextQueued(ctx)
+            if (id == null) {
+                // 잠깐 미뤄 둔 통화가 곧 차례면 기다렸다가 이어서
+                if (Store.soonestWait(ctx) in 1..6 * 60_000L) { Thread.sleep(15_000); continue }
+                break
+            }
+            processOne(ctx, id, myGen)
             Thread.sleep(6000) // 분당 한도에 덜 걸리게 간격 두기
         }
     }
 
     // ---------- summarising ----------
 
-    private fun processOne(ctx: Context, id: String) {
+    private fun processOne(ctx: Context, id: String, myGen: Int) {
         val call = Store.get(ctx, id) ?: return
         val key = Prefs.apiKey(ctx)
         current = id
+        busySince = System.currentTimeMillis()
         Store.patch(ctx, id, JSONObject().put("status", "working").put("error", "")
             .put("starts", call.optInt("starts") + 1).put("workingAt", System.currentTimeMillis()))
         var uploaded: String? = null
@@ -161,8 +194,9 @@ object Processor {
                 if (hits >= 12) fail(ctx, id, call, "AI가 계속 바빠서 요약하지 못했어요. 나중에 자동으로 다시 해요.", true)
                 else {
                     Store.patch(ctx, id, JSONObject().put("status", "queued").put("error", "").put("busyHits", hits)
+                        .put("notBefore", System.currentTimeMillis() + waitMs)
                         .put("waitNote", "AI가 잠깐 바빠서 곧 이어서 요약해요" + (if (e.detail.isNotEmpty()) " (${e.detail.take(90)})" else "")))
-                    pauseUntil = System.currentTimeMillis() + waitMs
+                    pauseUntil = System.currentTimeMillis() + minOf(waitMs, 45_000L)
                 }
             } else if (e.daily) {
                 // 하루 한도: 다시 채워질 때까지 기다렸다가 자동으로 이어서 요약 (시도 횟수는 세지 않음)
@@ -184,7 +218,7 @@ object Processor {
             fail(ctx, id, call, "처리 중 오류: ${e.javaClass.simpleName}", false)
         } finally {
             Gemini.deleteFile(key, uploaded)
-            current = null
+            if (myGen == gen) { current = null; busySince = 0L }
         }
     }
 

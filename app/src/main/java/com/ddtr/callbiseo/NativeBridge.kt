@@ -88,7 +88,7 @@ class NativeBridge(private val act: MainActivity) {
             val id = ids.optString(i)
             val c = Store.get(ctx, id) ?: continue
             if (c.optString("status") == "working" && Processor.current == id) continue
-            Store.patch(ctx, id, JSONObject().put("status", "queued").put("error", "").put("attempts", 0).put("starts", 0).put("busyHits", 0).put("waitNote", ""))
+            Store.patch(ctx, id, JSONObject().put("status", "queued").put("error", "").put("attempts", 0).put("starts", 0).put("busyHits", 0).put("waitNote", "").put("notBefore", 0))
         }
         Processor.pauseUntil = 0L
         when (Processor.canWork(ctx)) {
@@ -115,6 +115,8 @@ class NativeBridge(private val act: MainActivity) {
         .put("current", Processor.current ?: "")
         .put("block", Processor.canWork(ctx) ?: "")
         .put("pauseUntil", Processor.pauseUntil)
+        .put("busySince", Processor.busySince)
+        .put("beat", Processor.beat)
         .put("canRead", Recordings.canRead(ctx))
         .toString()
 
