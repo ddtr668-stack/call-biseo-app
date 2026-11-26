@@ -148,6 +148,10 @@ object Popup {
             }
             setOnClickListener { onTap() }
         }
+        // A안: 버튼 왼쪽 빈 곳에 앱 이름과 설치된 버전을 작은 글씨로
+        val ver = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "" } catch (e: Exception) { "" }
+        row.addView(text("상규 통화비서" + (if (ver.isNotEmpty()) " v$ver" else ""), 12f, muted, false, 1),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { gravity = Gravity.CENTER_VERTICAL })
         row.addView(btn("닫기", false) { hide(ctx) })
         row.addView(View(ctx), LinearLayout.LayoutParams(dp(8f), 1))
         row.addView(btn("자세히 보기", true) {
