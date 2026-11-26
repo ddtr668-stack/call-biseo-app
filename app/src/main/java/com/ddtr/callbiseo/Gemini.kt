@@ -139,20 +139,18 @@ object Gemini {
         return s
     }
 
-    /** Model from settings, or the best one the key can use (remembered). */
+    /**
+     * 설정에서 고른 모델. '자동 선택'이면 저장하지 않고 매번 안정적인 flash 별칭을 쓴다.
+     * (예전엔 자동으로 고른 모델을 설정에 저장해서 자동이 풀리고, 새 미리보기 모델로 바뀌곤 했다)
+     */
     fun model(ctx: android.content.Context, key: String): String {
-        val m = Prefs.model(ctx)
-        if (m.isNotEmpty()) return m
-        val found: String? = try {
-            listModels(key).firstOrNull()
-        } catch (e: AiException) {
-            throw e
-        } catch (e: Exception) {
-            null
+        val p = Prefs.of(ctx)
+        // 한 번만: 예전 버전이 자동으로 저장해 둔 모델을 지워 '자동 선택'으로 되돌린다
+        if (!p.getBoolean("modelAutoFixed", false)) {
+            p.edit().remove("model").putBoolean("modelAutoFixed", true).apply()
         }
-        val best = found ?: "gemini-flash-latest"
-        Prefs.of(ctx).edit().putString("model", best).apply()
-        return best
+        val m = Prefs.model(ctx)
+        return if (m.isNotEmpty()) m else "gemini-flash-latest"
     }
 
     fun generate(key: String, model: String, body: JSONObject): JSONObject {

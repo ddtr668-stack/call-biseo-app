@@ -161,7 +161,7 @@ object Processor {
                 if (hits >= 12) fail(ctx, id, call, "AI가 계속 바빠서 요약하지 못했어요. 나중에 자동으로 다시 해요.", true)
                 else {
                     Store.patch(ctx, id, JSONObject().put("status", "queued").put("error", "").put("busyHits", hits)
-                        .put("waitNote", "AI가 잠깐 바빠서 곧 이어서 요약해요"))
+                        .put("waitNote", "AI가 잠깐 바빠서 곧 이어서 요약해요" + (if (e.detail.isNotEmpty()) " (${e.detail.take(90)})" else "")))
                     pauseUntil = System.currentTimeMillis() + waitMs
                 }
             } else if (e.daily) {
