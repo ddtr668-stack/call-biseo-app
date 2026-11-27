@@ -34,10 +34,20 @@ class IncomingReceiver : BroadcastReceiver() {
             }
             // 전화를 받으면: 설정한 시간(바로·5초·10초·20초) 뒤에 닫기, '통화 끝날 때'면 그대로
             TelephonyManager.EXTRA_STATE_OFFHOOK -> {
+                Prefs.of(ctx).edit().putLong("offhookAt", System.currentTimeMillis()).apply()
                 val sec = Prefs.of(ctx).getString("incomingClose", "10") ?: "10"
                 sec.toIntOrNull()?.let { Popup.hideIncomingAfter(ctx, it * 1000L) }
             }
-            TelephonyManager.EXTRA_STATE_IDLE -> Popup.hideIncoming(ctx)
+            TelephonyManager.EXTRA_STATE_IDLE -> {
+                Popup.hideIncoming(ctx)
+                // 통화를 했다가 끊은 경우(받은 전화·건 전화 모두): 녹음 파일이 저장되는 대로 바로 요약
+                val p = Prefs.of(ctx)
+                val at = p.getLong("offhookAt", 0L)
+                if (at > 0L) {
+                    p.edit().putLong("offhookAt", 0L).putLong("callEndAt", System.currentTimeMillis()).apply()
+                    ScanJob.callEnded(ctx)
+                }
+            }
         }
     }
 }

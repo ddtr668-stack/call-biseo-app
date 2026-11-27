@@ -204,6 +204,13 @@ object Gemini {
         return out.take(3)
     }
 
+    /** 생각(thinking) 수준을 정할 수 있는 모델 (Gemini 3 이상, flash-latest 별칭) */
+    fun isThinker(model: String): Boolean {
+        if (model.endsWith("-latest")) return true
+        val v = Regex("gemini-(\\d+)").find(model)?.groupValues?.get(1)?.toIntOrNull() ?: return false
+        return v >= 3
+    }
+
     /** 이 모델에서만 난 문제라 다른 모델로 바꿔 볼 만한 오류인지 (API 키 문제는 바꿔도 소용없음) */
     fun switchable(e: AiException): Boolean =
         e.code == 429 || e.code == 404 || (e.code == 400 && e.message?.contains("API 키") != true)

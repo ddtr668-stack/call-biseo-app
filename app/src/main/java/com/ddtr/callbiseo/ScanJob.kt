@@ -22,7 +22,14 @@ class ScanJob : JobService() {
         val ctx = applicationContext
         worker = Thread {
             try {
-                Thread.sleep(if (params.jobId == ID_TRIGGER) 4000L else 0L) // let the phone finish writing the file
+                if (params.jobId == ID_CALLEND) {
+                    // 통화가 막 끝남: 녹음 파일이 저장될 때까지 2초마다 확인 (최대 90초)
+                    val end = System.currentTimeMillis() + 90_000L
+                    while (System.currentTimeMillis() < end) {
+                        Thread.sleep(2000L)
+                        if (Processor.sync(ctx) > 0) break
+                    }
+                } else Thread.sleep(if (params.jobId == ID_TRIGGER) 4000L else 0L) // let the phone finish writing the file
                 Processor.sync(ctx)
                 Processor.requeue(ctx)
                 if (Prefs.auto(ctx) || params.jobId == ID_RETRY) Processor.kick(ctx).get()
@@ -39,6 +46,18 @@ class ScanJob : JobService() {
     companion object {
         const val ID_TRIGGER = 41
         const val ID_RETRY = 42
+        const val ID_CALLEND = 43
+
+        /** 통화가 끝난 순간: 기다리지 않고 바로 도는 급행 작업으로 녹음을 찾아 요약 */
+        fun callEnded(ctx: Context) {
+            val js = ctx.getSystemService(JobScheduler::class.java) ?: return
+            val b = JobInfo.Builder(ID_CALLEND, ComponentName(ctx, ScanJob::class.java))
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            if (android.os.Build.VERSION.SDK_INT >= 31) b.setExpedited(true) else b.setOverrideDeadline(0)
+            try { js.schedule(b.build()) } catch (e: Exception) {
+                try { js.schedule(JobInfo.Builder(ID_CALLEND, ComponentName(ctx, ScanJob::class.java)).setOverrideDeadline(0).build()) } catch (x: Exception) { }
+            }
+        }
 
         fun schedule(ctx: Context) {
             val js = ctx.getSystemService(JobScheduler::class.java) ?: return

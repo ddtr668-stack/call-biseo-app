@@ -251,25 +251,35 @@ object Processor {
 
     private fun ask(key: String, model: String, audio: JSONObject, call: JSONObject, ctx: Context, full: Boolean): JSONObject {
         val prompt = prompt(ctx, call, full)
-        val body = JSONObject()
-            .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(audio).put(JSONObject().put("text", prompt)))))
-            .put("generationConfig", JSONObject().put("temperature", 0.2).put("responseMimeType", "application/json").put("responseSchema", schema()))
-        val resp = try {
-            Gemini.generate(key, model, body)
-        } catch (e: AiException) {
-            if (e.code != 400 || e.message?.contains("API 키") == true) throw e
-            // older/newer models may not accept the schema: ask for the same JSON in words
-            body.getJSONObject("generationConfig").remove("responseSchema")
+        // 이 모델에서 통했던 요청 모양을 기억해 두고 처음부터 그걸로 보낸다
+        // (예전엔 매번 거절(400)당한 뒤 다시 보내서 요약이 두세 배 느렸다)
+        // 1 = 응답 틀(schema) 빼기, 2 = 녹음 형식 이름 audio/aac, 4 = 생각(thinking) 설정 빼기
+        val prefs = Prefs.of(ctx)
+        val fmtKey = "fmt_$model"
+        val alt = Gemini.altAudio(audio)
+        val tries = listOf(0, 4, 5, 7).map { it or prefs.getInt(fmtKey, 0) }.distinct()
+            .filter { (it and 2) == 0 || alt != null }
+        var last: AiException? = null
+        var resp: JSONObject? = null
+        for (fmt in tries) {
+            val cfg = JSONObject().put("temperature", 0.2).put("responseMimeType", "application/json")
+            if ((fmt and 1) == 0) cfg.put("responseSchema", schema())
+            // 빠른 답: Gemini 3 이상은 생각을 짧게
+            if ((fmt and 4) == 0 && Gemini.isThinker(model)) cfg.put("thinkingConfig", JSONObject().put("thinkingLevel", "low"))
+            val part = if ((fmt and 2) != 0 && alt != null) alt else audio
+            val body = JSONObject()
+                .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(part).put(JSONObject().put("text", prompt)))))
+                .put("generationConfig", cfg)
             try {
-                Gemini.generate(key, model, body)
-            } catch (e2: AiException) {
-                // 그래도 안 되면 녹음 형식 이름을 Gemini 공식 형식(audio/aac)으로 바꿔 한 번 더
-                val alt = Gemini.altAudio(audio)
-                if (e2.code != 400 || alt == null) throw e2
-                body.put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(alt).put(JSONObject().put("text", prompt)))))
-                Gemini.generate(key, model, body)
+                resp = Gemini.generate(key, model, body)
+                if (fmt != prefs.getInt(fmtKey, 0)) prefs.edit().putInt(fmtKey, fmt).apply()
+                break
+            } catch (e: AiException) {
+                if (e.code != 400 || e.message?.contains("API 키") == true) throw e
+                last = e
             }
         }
+        if (resp == null) throw last ?: AiException(0, "요약하지 못했어요.", true)
         val text = Gemini.textOf(resp)
         val json = Gemini.parseJson(text)
         if (json != null && json.has("summary")) return json
