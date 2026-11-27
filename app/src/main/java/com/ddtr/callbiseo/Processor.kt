@@ -311,6 +311,7 @@ $transcriptRule
 - category: 상담/견적/주문/납품/클레임/수금/일정/내부/개인/기타 중 하나
 - company: 상대 회사·소속 (말에서 확인될 때만, 아니면 빈 문자열)
 - counterpart: 상대 이름·직함 (확인될 때만)
+- brief: 팝업에 띄울 아주 짧은 요약 정확히 2줄. 1줄은 무슨 얘기였는지, 2줄은 어떻게 하기로 했는지(결론). 각 줄 25자 안팎, 문장 끝맺음 없이 명사형·개조식으로(예: "선은 나중에, 판넬·공조기 고정 먼저 진행"). '나는/상대는' 같은 주어는 빼고, 숫자·날짜·제품명은 살린다.
 - summary: 핵심 내용 3~6문장. 금액·수량·날짜·제품명·조건 같은 구체적인 숫자와 고유명사를 꼭 넣고, 누가 무엇을 요청/약속했는지 분명히.
 - actions: 통화에서 나온 할 일과 약속.
   · type 'event' = 정해진 때의 약속(미팅·방문·통화 예정·납품일), 'todo' = 해야 할 일(견적서 보내기, 확인 후 회신 등)
@@ -349,6 +350,7 @@ $transcriptRule
             "company" to s(),
             "counterpart" to s(),
             "summary" to arr(s()),
+            "brief" to arr(s()),
             "actions" to arr(
                 obj(
                     linkedMapOf(
@@ -387,6 +389,7 @@ $transcriptRule
             .put("company", r.optString("company").trim())
             .put("counterpart", r.optString("counterpart").trim())
             .put("summary", r.optJSONArray("summary") ?: JSONArray())
+            .put("brief", r.optJSONArray("brief") ?: JSONArray())
             .put("transcript", r.optJSONArray("transcript") ?: JSONArray())
             .put("actions", actions)
             .put("keywords", r.optJSONArray("keywords") ?: JSONArray())

@@ -117,9 +117,12 @@ object Popup {
 
         card.addView(text(c.optString("title"), 16.5f, ink, true, 2).apply { setPadding(0, dp(10f), 0, dp(4f)) })
 
-        val sum = c.optJSONArray("summary") ?: JSONArray()
-        for (i in 0 until minOf(sum.length(), 4)) {
-            card.addView(text("•  " + sum.optString(i), 14.5f, ink, false, 3).apply { setPadding(0, dp(3f), 0, 0) })
+        // A안: 팝업에는 짧은 요약 2줄만 (전체 요약은 '자세히 보기'에서)
+        val brief = c.optJSONArray("brief")
+        val lines = if (brief != null && brief.length() > 0) (0 until brief.length()).map { brief.optString(it) }
+            else (c.optJSONArray("summary") ?: JSONArray()).let { s -> (0 until s.length()).map { s.optString(it) } } // 예전 통화: 기존 요약 앞 2줄을 한 줄씩
+        for (l in lines.filter { it.isNotBlank() }.take(2)) {
+            card.addView(text("·  " + l.trim(), 14f, muted, false, 1).apply { setPadding(0, dp(3f), 0, 0) })
         }
 
         val acts = c.optJSONArray("actions") ?: JSONArray()
