@@ -76,6 +76,8 @@ object Incoming {
     /** 이 번호와 했던 통화 중 요약이 끝난 가장 최근 것. 없으면 null */
     fun lastCallWith(ctx: Context, number: String): JSONObject? {
         val name = Recordings.contactName(ctx, number)
+        // 차단 목록(요약 안 할 사람)에 있으면 팝업도 띄우지 않는다: 번호·연락처 이름 둘 다 확인
+        if (Prefs.isSkipped(ctx, name ?: "", number) || Prefs.isSkipped(ctx, Recordings.formatNumber(norm(number)), number)) return null
         val arr = JSONArray(Store.allJson(ctx))
         var best: JSONObject? = null
         var count = 0
@@ -85,6 +87,7 @@ object Incoming {
                 (name != null && c.optString("contact") == name) ||
                 (Recordings.isNumber(c.optString("contact")) && same(c.optString("contact"), number))
             if (!hit) continue
+            if (c.optString("status") == "skip" || Prefs.isSkipped(ctx, c.optString("contact"), c.optString("number"))) return null
             count++
             if (c.optString("status") != "done") continue
             if (best == null || c.optLong("ts") > best.optLong("ts")) best = c
