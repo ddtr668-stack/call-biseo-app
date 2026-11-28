@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 앱 아이콘 B안 앞면: 초록 유리 말풍선 + 흰 소리 막대 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- 바닥 그림자 -->
+    <path android:pathData="M34,82a20,3 0 1 0 40,0a20,3 0 1 0 -40,0z" android:fillColor="#1F0F5C4D"/>
+    <!-- 유리 말풍선 -->
+    <path
+        android:pathData="M36,34h36a8,8 0 0 1 8,8v20a8,8 0 0 1 -8,8h-18l-12,9v-9h-6a8,8 0 0 1 -8,-8v-20a8,8 0 0 1 8,-8z"
+        android:strokeColor="#E6FFFFFF" android:strokeWidth="1.2">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="54" android:startY="34" android:endX="54" android:endY="79">
+                <item android:offset="0" android:color="#F23ACB99"/>
+                <item android:offset="1" android:color="#E60F7A5F"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- 윗면 빛 반사 -->
+    <path android:pathData="M36,35.4h36a6.6,6.6 0 0 1 6.6,6.6v3.4h-49.2v-3.4a6.6,6.6 0 0 1 6.6,-6.6z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="54" android:startY="35" android:endX="54" android:endY="46">
+                <item android:offset="0" android:color="#73FFFFFF"/>
+                <item android:offset="1" android:color="#00FFFFFF"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- 소리 막대 -->
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6"
+        android:strokeLineCap="round"
+        android:pathData="M42,52v0 M48,47v10 M54,43v18 M60,47v10 M66,52v0" />
+</vector>
