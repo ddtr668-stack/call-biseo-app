@@ -178,6 +178,60 @@ object Gemini {
         return JSONObject(r.body)
     }
 
+    /**
+     * 비서 탭용: 답을 글자가 나오는 대로 받는다(스트리밍). 기다리며 다시 해 보기는 하지 않는다(바로 다음 모델로).
+     * onText는 지금까지 받은 글 전체를 받는다. 끝나면 일반 응답과 같은 모양의 JSON을 돌려준다.
+     */
+    fun stream(key: String, model: String, body: JSONObject, onText: (String) -> Unit): JSONObject {
+        val bytes = body.toString().toByteArray(Charsets.UTF_8)
+        val c = URL("$BASE/v1beta/models/$model:streamGenerateContent?alt=sse").openConnection() as HttpURLConnection
+        try {
+            c.connectTimeout = 20_000
+            c.readTimeout = 90_000
+            c.requestMethod = "POST"
+            c.setRequestProperty("x-goog-api-key", key)
+            c.doOutput = true
+            c.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            c.setFixedLengthStreamingMode(bytes.size)
+            c.outputStream.use { it.write(bytes) }
+            val code = c.responseCode
+            if (code != 200) {
+                val text = try { c.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: "" } catch (e: IOException) { "" }
+                throw errorOf(Res(code, text, emptyMap())).also { it.detail = model + (if (it.detail.isNotEmpty()) ", " + it.detail else "") }
+            }
+            val sb = StringBuilder()
+            var grounding: JSONObject? = null
+            var finish = ""
+            var feedback: JSONObject? = null
+            var lastPush = 0L
+            c.inputStream.bufferedReader(Charsets.UTF_8).use { rd ->
+                while (true) {
+                    val line = rd.readLine() ?: break
+                    if (!line.startsWith("data:")) continue
+                    val chunk = try { JSONObject(line.substring(5).trim()) } catch (e: Exception) { continue }
+                    chunk.optJSONObject("promptFeedback")?.let { feedback = it }
+                    val cand = chunk.optJSONArray("candidates")?.optJSONObject(0) ?: continue
+                    cand.optJSONObject("groundingMetadata")?.let { grounding = it }
+                    cand.optString("finishReason").let { if (it.isNotEmpty()) finish = it }
+                    val parts = cand.optJSONObject("content")?.optJSONArray("parts") ?: continue
+                    for (i in 0 until parts.length()) {
+                        val p = parts.optJSONObject(i) ?: continue
+                        if (p.optBoolean("thought", false)) continue
+                        sb.append(p.optString("text", ""))
+                    }
+                    val now = System.currentTimeMillis()
+                    if (now - lastPush > 120) { lastPush = now; onText(sb.toString()) }
+                }
+            }
+            onText(sb.toString())
+            if (sb.isEmpty() && feedback != null) return JSONObject().put("promptFeedback", feedback)
+            val cand = JSONObject().put("content", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", sb.toString()))))
+                .put("finishReason", finish)
+            grounding?.let { cand.put("groundingMetadata", it) }
+            return JSONObject().put("candidates", JSONArray().put(cand))
+        } finally { c.disconnect() }
+    }
+
     /** 사용할 수 있는 모델 목록 (3일 동안 기억) */
     fun cachedModels(ctx: android.content.Context, key: String): List<String> {
         val p = Prefs.of(ctx)

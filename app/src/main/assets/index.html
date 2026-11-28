@@ -254,7 +254,8 @@ window.__native = {
   launch(){ const id = N.takeLaunch(); if (id){ reloadCalls(); openCall(id); } },
   resumed(){ refresh(false); },
   tasksChanged(){ S.set = JSON.parse(N.settings()); render(); },
-  summaryDone(id){ reloadCalls(); summaryPopup(id); }
+  summaryDone(id){ reloadCalls(); summaryPopup(id); },
+  aiPartial(id, t){ if (!S.chatBusy) return; S.chatPartial = t; const el = document.getElementById('aiPartial'); if (el) el.textContent = cleanAnswer(t).text; else if (S.tab === 'chat') render(); }
 };
 let reloadT = 0;
 
@@ -730,7 +731,7 @@ function viewChat(){
     }
     h += `</div>`;
   }
-  if (S.chatBusy) h += `<div class="msg model"><span class="spin"></span> 찾아보는 중…</div>`;
+  if (S.chatBusy) h += S.chatPartial ? `<div class="msg model" id="aiPartial" style="white-space:pre-wrap">${esc(cleanAnswer(S.chatPartial).text)}</div>` : `<div class="msg model"><span class="spin"></span> 찾아보는 중…</div>`;
   h += `</div><div class="composer"><textarea id="chatin" rows="1" placeholder="통화 내용, 날씨, 문자 초안… 무엇이든">${esc(S.chatDraft||'')}</textarea>
     <button data-act="send" aria-label="보내기">${I.send}</button></div></div>`;
   return h;
@@ -744,6 +745,10 @@ function callLine(c){
   const acts = (c.actions||[]).map(a => `${a.done?'(완료)':''}${a.owner}:${a.title}${a.date?'@'+a.date+(a.time?' '+a.time:''):''}`).join('; ');
   return `[${c.id}] ${when} | ${who} | ${c.category||''} | ${c.title||''} | 요약: ${(c.summary||[]).join(' ')}${acts?' | 할일: '+acts:''}${c.memo?' | 메모: '+c.memo:''}`;
 }
+function isCallish(q, contact, hits){
+  return !!(contact || hits || /통화|전화|거래처|고객|할\s*일|약속|일정|견적|주문|납품|단가|수금|클레임|브리핑|요약|정리|누가|언제|얼마|오늘|어제|이번\s*주|지난/.test(q));
+}
+function needsWeb(q){ return /날씨|뉴스|시세|주가|환율|검색|최신|요즘|최근 소식|맛집|영업시간|주소|가는\s*길|위치|어디|가격|얼마야|몇\s*시까지|교통|기사|발표|법|규정|제도/.test(q); }
 function buildContext(question, contact){
   // AI에 보내는 양을 줄여야 무료 한도에 덜 걸린다: 관련된 통화 위주로만
   const words = question.toLowerCase().split(/[\s,.?!]+/).map(w => w.replace(/(은|는|이|가|을|를|에|에게|한테|랑|과|와|의|도|님|씨|이랑)$/,'')).filter(w => w.length >= 2);
@@ -752,20 +757,20 @@ function buildContext(question, contact){
     for (const w of words){ if ((c.contact||'').toLowerCase().includes(w) || (c.company||'').toLowerCase().includes(w)) s += 5; if (t.includes(w)) s += 1; }
     return s; };
   const scored = done.map(c => [score(c), c]).filter(x => x[0] > 0).sort((a,b) => b[0] - a[0] || b[1].ts - a[1].ts);
-  const callish = contact || scored.length || /통화|전화|거래처|고객|할\s*일|약속|일정|견적|주문|납품|단가|수금|클레임|브리핑|요약|정리|누가|언제|얼마|오늘|어제|이번\s*주|지난/.test(question);
+  const callish = isCallish(question, contact, scored.length);
   if (!callish) return `(이번 질문은 통화 기록과 관계없어 보여서 기록을 생략했어요. 요약된 통화 ${done.length}건이 있어요.)`;
   const lines = []; let size = 0; const seen = new Set();
-  const addLine = c => { if (seen.has(c.id)) return; const l = callLine(c); if (size + l.length > 24000) return; seen.add(c.id); lines.push(l); size += l.length; };
+  const addLine = c => { if (seen.has(c.id)) return; const l = callLine(c); if (size + l.length > 12000) return; seen.add(c.id); lines.push(l); size += l.length; };
   if (contact) S.calls.filter(c => c.contact === contact).forEach(addLine);
-  scored.slice(0, 30).forEach(x => addLine(x[1]));
-  S.calls.slice(0, 60).forEach(addLine);
-  let picked = contact ? done.filter(c => c.contact === contact).slice(0, 8) : [];
-  scored.slice(0, 4).forEach(x => { if (!picked.includes(x[1])) picked.push(x[1]); });
+  scored.slice(0, 20).forEach(x => addLine(x[1]));
+  S.calls.slice(0, 30).forEach(addLine);
+  let picked = contact ? done.filter(c => c.contact === contact).slice(0, 4) : [];
+  scored.slice(0, 2).forEach(x => { if (!picked.includes(x[1])) picked.push(x[1]); });
   if (/오늘|어제|방금|아까/.test(question)) done.slice(0, 3).forEach(c => { if (!picked.includes(c)) picked.push(c); });
-  let tx = ''; const LIM = contact ? 30000 : 18000;
+  let tx = ''; const LIM = contact ? 14000 : 8000;
   for (const c of picked){
     let t = (c.transcript||[]).map(x => `${x.s === '나' ? '나' : '상대'}: ${x.t}`).join('\n');
-    if (t.length > 8000) t = t.slice(0, 8000) + '\n(이하 생략)';
+    if (t.length > 5000) t = t.slice(0, 5000) + '\n(이하 생략)';
     if (tx.length + t.length > LIM) break;
     tx += `\n\n### [${c.id}] ${c.contact} ${dayLabel(c.ts)} ${timeLabel(c.ts)} 대화 원문\n${t}`;
   }
@@ -784,7 +789,7 @@ async function ask(q, contact){
   q = q.trim(); if (!q || S.chatBusy) return;
   if (!S.set.apiKey){ toast('설정에서 Gemini API 키를 먼저 넣어 주세요.'); return; }
   S.data.chat = (S.data.chat || []).concat([{role:'user', text:q}]).slice(-40);
-  S.chatDraft = ''; S.chatBusy = true; saveData(); render();
+  S.chatDraft = ''; S.chatBusy = true; S.chatPartial = ''; saveData(); render();
   const now = new Date();
   const sys = `너는 영업 담당자(사용자)의 개인 비서야. 무엇을 물어봐도 한국어로 짧고 실용적으로 도와줘.
 - 오늘은 ${ymd(now)} (${WD[now.getDay()]}) ${pad(now.getHours())}:${pad(now.getMinutes())}.
@@ -801,12 +806,13 @@ ${buildContext(q, contact)}`;
   const body = {
     systemInstruction: {parts:[{text: sys}]},
     contents: hist.concat([{role:'user', parts:[{text:q}]}]),
-    tools: [{google_search: {}}],
     generationConfig: {temperature: 0.4}
   };
+  // 검색은 통화 기록과 관계없거나 최신 정보가 필요한 질문에만 (검색이 붙으면 몇 초 더 걸림)
+  if (needsWeb(q) || !isCallish(q, contact, 0)) body.tools = [{google_search: {}}];
   let r = await nreq('ai', JSON.stringify(body));
   if (r.status === -3 && /\(400\)|\(403\)/.test(r.body)){ delete body.tools; r = await nreq('ai', JSON.stringify(body)); }
-  S.chatBusy = false;
+  S.chatBusy = false; S.chatPartial = '';
   let msg;
   if (r.status === 200){
     let o = {}; try { o = JSON.parse(r.body); } catch(e){ o = {text: r.body}; }

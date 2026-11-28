@@ -210,15 +210,29 @@ class NativeBridge(private val act: MainActivity) {
                 var resp: JSONObject? = null
                 var used = primary
                 var lastErr: AiException? = null
-                for (m in listOf(primary) + Gemini.backups(ctx, key, primary)) {
-                    try { resp = Gemini.generate(key, m, req); used = m; break }
-                    catch (e: AiException) { if (!Gemini.switchable(e)) throw e; if (lastErr == null || e.code == 429) lastErr = e }
+                // 글자가 나오는 대로 화면에 보여 준다 (스트리밍)
+                val partial: (String) -> Unit = { t -> act.js("window.__native&&window.__native.aiPartial&&window.__native.aiPartial(${JSONObject.quote(id)},${JSONObject.quote(t)})") }
+                // 빠른 답: Gemini 3 이상은 생각을 짧게 (안 받는 모델이면 빼고 다시)
+                val gc = req.optJSONObject("generationConfig") ?: JSONObject().also { req.put("generationConfig", it) }
+                fun tryModel(m: String): JSONObject {
+                    if (Gemini.isThinker(m)) gc.put("thinkingConfig", JSONObject().put("thinkingLevel", "low")) else gc.remove("thinkingConfig")
+                    return try { Gemini.stream(key, m, req, partial) } catch (e: AiException) {
+                        if (e.code != 400 || !gc.has("thinkingConfig")) throw e
+                        gc.remove("thinkingConfig"); Gemini.stream(key, m, req, partial)
+                    }
                 }
-                if (resp == null && req.has("tools")) {
-                    // 검색 기능 한도일 수도 있으니 검색 없이 한 번 더
+                var spendHit = false
+                for (m in listOf(primary) + Gemini.backups(ctx, key, primary).take(2)) {
+                    try { resp = tryModel(m); used = m; break }
+                    catch (e: AiException) {
+                        if (e.spend) { spendHit = true; lastErr = e; break } // 지출 한도: 다른 모델도 막힘
+                        if (!Gemini.switchable(e)) throw e; if (lastErr == null || e.code == 429) lastErr = e
+                    }
+                }
+                if (resp == null && !spendHit && req.has("tools")) {
+                    // 검색 기능 문제일 수도 있으니 검색 없이 한 번 더
                     req.remove("tools")
-                    val m = Gemini.backups(ctx, key, primary).firstOrNull() ?: primary
-                    try { resp = Gemini.generate(key, m, req); used = m } catch (e: AiException) { lastErr = e }
+                    try { resp = tryModel(primary); used = primary } catch (e: AiException) { lastErr = e }
                 }
                 Processor.holdUntil = 0L
                 if (resp == null) throw lastErr ?: AiException(0, "답을 받지 못했어요.")
