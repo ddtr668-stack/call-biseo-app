@@ -158,6 +158,7 @@ class NativeBridge(private val act: MainActivity) {
         val o = JSONObject()
         o.put("apiKey", Prefs.apiKey(ctx))
         o.put("model", Prefs.model(ctx))
+        o.put("chatModel", prefs.getString("chatModel", "") ?: "")
         o.put("auto", Prefs.auto(ctx))
         o.put("wifiOnly", Prefs.wifiOnly(ctx))
         o.put("popup", Prefs.popup(ctx))
@@ -206,7 +207,8 @@ class NativeBridge(private val act: MainActivity) {
                 if (key.isEmpty()) { done(id, -3, "설정에서 Gemini API 키를 먼저 넣어 주세요."); return@execute }
                 Processor.holdUntil = System.currentTimeMillis() + 60_000L
                 val req = JSONObject(body)
-                val primary = Gemini.model(ctx, key)
+                // 비서 대화 모델을 따로 골랐으면 그걸로, 아니면 요약과 같은 모델
+                val primary = (prefs.getString("chatModel", "") ?: "").ifEmpty { Gemini.model(ctx, key) }
                 var resp: JSONObject? = null
                 var used = primary
                 var lastErr: AiException? = null

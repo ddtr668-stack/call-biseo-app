@@ -713,15 +713,52 @@ function setActsDone(ids, done){
 }
 
 const SUGG = ['오늘 통화한 내용 정리해줘', '이번 주에 내가 해야 할 일 알려줘', '내일 청주 날씨 어때?', '견적서 보냈다고 거래처에 보낼 문자 써줘'];
+// ---------------------------------------------------------------- AI 모델 단계 (B안)
+const TIERS = [['','자동'],['lite','빠름·저렴'],['flash','보통'],['hydrogen','새 표준'],['pro','똑똑함'],['neon','최고']];
+const TIER_HINT = {lite:'Flash Lite', flash:'Flash', hydrogen:'4 Hydrogen', pro:'Pro', neon:'4 Neon'};
+const BAD_MODEL = /preview|exp|tts|image|live|audio|embedding|vision|thinking|learnlm|aqa|nano/;
+function verOf(m){ const v = (m.match(/gemini-([\d.]+)/) || [])[1] || '0'; return v.split('.').map(Number); }
+function newest(list){ return list.slice().sort((a,b) => { const x = verOf(a), y = verOf(b); for (let i = 0; i < 3; i++){ if ((y[i]||0) !== (x[i]||0)) return (y[i]||0) - (x[i]||0); } return a.length - b.length; })[0]; }
+function tierModel(t){
+  const list = (S.models || []).filter(m => !BAD_MODEL.test(m));
+  const has = list.length > 0;
+  if (t === 'lite') return newest(list.filter(m => /^gemini-[\d.]+-flash-lite$/.test(m))) || 'gemini-flash-lite-latest';
+  if (t === 'flash') return newest(list.filter(m => /^gemini-[\d.]+-flash$/.test(m))) || 'gemini-flash-latest';
+  if (t === 'hydrogen') return list.find(m => /hydrogen/.test(m)) || (has ? null : 'gemini-4-hydrogen');
+  if (t === 'neon') return list.find(m => /neon/.test(m)) || (has ? null : 'gemini-4-neon');
+  if (t === 'pro') return newest(list.filter(m => /^gemini-[\d.]+-pro$/.test(m))) || null;
+  return '';
+}
+function tierOf(model){
+  if (!model) return '';
+  for (const [t] of TIERS) if (t && tierModel(t) === model) return t;
+  return 'custom';
+}
+function tierLabel(model){
+  const t = tierOf(model);
+  if (t === 'custom') return model;
+  const l = (TIERS.find(x => x[0] === t) || ['', '자동'])[1];
+  return t ? `${l} (${TIER_HINT[t]})` : '자동';
+}
+function tierButtons(act, cur){
+  const ct = tierOf(cur);
+  return TIERS.filter(([t]) => tierModel(t) !== null).map(([t, l]) =>
+    `<button data-act="${act}" data-k="${t}" class="${ct===t?'on':''}">${l}</button>`).join('') +
+    (ct === 'custom' ? `<button class="on" disabled>${esc(cur)}</button>` : '');
+}
+
 function viewChat(){
   const log = S.data.chat || [];
-  let h = `<div class="chatwrap"><div class="top" style="padding-bottom:6px"><div class="row"><h1>비서</h1>${log.length?`<button class="btn ghost small" data-act="chatClear">새 대화</button>`:''}</div></div><div class="chatlog" id="chatlog">`;
+  const cm = S.set.chatModel || '';
+  let h = `<div class="chatwrap"><div class="top" style="padding-bottom:6px"><div class="row"><h1>비서</h1><div style="display:flex;gap:6px;align-items:center"><button class="btn ghost small" data-act="chatModelMenu" style="border-radius:999px">${esc(tierLabel(cm))} ▾</button>${log.length?`<button class="btn ghost small" data-act="chatClear">새 대화</button>`:''}</div></div>` +
+    (S.chatModelOpen ? `<div class="seg" style="flex-wrap:wrap;margin-top:8px">${tierButtons('chatModel', cm)}</div><small style="display:block;color:var(--muted);margin-top:4px">빠름·저렴이 가장 빠르고, 최고(Neon)는 가장 똑똑하지만 느리고 비싸요.</small>` : '') +
+    `</div><div class="chatlog" id="chatlog">`;
   if (!log.length){
     h += `<div class="intro">무엇이든 물어보세요. 지난 통화(요약 ${S.calls.filter(c=>c.status==='done').length}개)는 기록에서 찾아 답하고, 날씨·뉴스·문자 초안 같은 건 구글 검색까지 써서 답해요.</div><div class="sugg">` +
       SUGG.map(s => `<button data-act="ask" data-q="${esc(s)}">${esc(s)}</button>`).join('') + `</div>`;
   }
   for (const m of log){
-    h += `<div class="msg ${m.role}${m.err?' err':''}">${esc(m.text)}`;
+    h += `<div class="msg ${m.role}${m.err?' err':''}">${esc(m.text)}` + (m.model && !m.err ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">${esc(tierLabel(m.model))}</div>` : '');
     const refs = (m.refs||[]).filter(id => S.byId[id]);
     const src = (m.sources||[]).slice(0, 4);
     if (refs.length || src.length){
@@ -817,7 +854,7 @@ ${buildContext(q, contact)}`;
   if (r.status === 200){
     let o = {}; try { o = JSON.parse(r.body); } catch(e){ o = {text: r.body}; }
     const c = cleanAnswer(o.text || '');
-    msg = {role:'model', text: c.text || '답을 받지 못했어요.', refs: c.refs.slice(0, 8), sources: (o.sources||[]).filter(x => x.uri)};
+    msg = {role:'model', text: c.text || '답을 받지 못했어요.', refs: c.refs.slice(0, 8), sources: (o.sources||[]).filter(x => x.uri), model: o.model || ''};
   } else msg = {role:'model', err:true, text: r.status === -1 ? '인터넷 연결을 확인하고 다시 물어봐 주세요.' : (r.body || '답을 받지 못했어요.')};
   S.data.chat.push(msg); saveData();
   if (S.tab === 'chat') render();
@@ -836,8 +873,11 @@ function viewSettings(){
     <div class="field"><label for="apikey">API 키</label><div class="inl"><input id="apikey" type="password" value="${esc(s.apiKey)}" placeholder="AIza로 시작하는 키" autocomplete="off"><button class="btn small" data-act="saveKey">저장</button></div>
       <small>구글 AI 스튜디오에서 무료로 만들 수 있어요. <button class="link" data-act="url" data-u="https://aistudio.google.com/apikey">키 만들기</button><br>
       무료 키는 구글이 내용을 학습에 쓸 수 있어요. 거래처 통화라면 결제 정보를 등록한 유료 키를 권해요 (통화 1건에 몇십 원).</small></div>
-    <div class="field"><label for="model">모델</label><div class="inl"><select id="model" data-set="model"><option value="">자동 선택</option>${(S.models||[]).concat(s.model && !(S.models||[]).includes(s.model) ? [s.model] : []).map(m => `<option ${m===s.model?'selected':''}>${esc(m)}</option>`).join('')}</select>
-      <button class="btn ghost small" data-act="loadModels">불러오기</button></div><small>잘 모르겠으면 자동 선택에 두세요. 'flash'가 빠르고 저렴해요.</small></div>
+    <div class="field"><label>통화 요약 모델</label><div class="seg" style="flex-wrap:wrap">${tierButtons('sumModel', s.model)}</div>
+      <small>지금: ${esc(s.model || '자동 (gemini-flash-latest)')} · 요약은 '빠름·저렴'이면 비용이 가장 적어요.</small></div>
+    <div class="field"><label>비서 대화 모델</label><div class="seg" style="flex-wrap:wrap">${tierButtons('chatModel', s.chatModel)}</div>
+      <small>지금: ${esc(s.chatModel || '자동 (요약과 같은 모델)')} · 비서 탭 위에서도 바로 바꿀 수 있어요.</small></div>
+    <div class="field"><small>빠름·저렴 = Flash Lite · 보통 = Flash · 새 표준 = Gemini 4 Hydrogen · 똑똑함 = Pro · 최고 = Gemini 4 Neon (가장 비쌈). 이 API 키로 쓸 수 있는 모델만 보여요. <button class="link" data-act="loadModels">모델 목록 새로 고침</button></small></div>
     <div class="srow"><div class="l"><b>통화 끝나면 자동 요약</b><small>새 녹음이 생기면 바로 받아쓰고 요약해서 알림을 보내요</small></div>${tg('auto', s.auto)}</div>
     <div class="srow"><div class="l"><b>요약 끝나면 팝업으로 보기</b><small>${p.overlay ? '다른 앱을 쓰고 있어도 화면 위에 요약 카드를 띄워요' : '화면 위 팝업 권한을 허용하면 다른 앱 위에도 카드로 떠요. 지금은 화면 위쪽 알림으로 보여요.'}</small></div>${tg('popup', s.popup)}</div>
     ${s.popup && p.overlay ? `<div class="field"><label>팝업 위치</label><div class="seg" id="ppos">${[['top','위'],['center','가운데'],['bottom','아래']].map(([v,l]) => `<button data-act="popPos" data-k="${v}" class="${(s.popupPos||'bottom')===v?'on':''}">${l}</button>`).join('')}</div>
@@ -1169,6 +1209,14 @@ document.addEventListener('click', e => {
     }
     case 'saveKey': { const v = $('#apikey').value.trim(); N.setSetting('apiKey', v); S.set.apiKey = v; toast(v ? 'API 키를 저장했어요' : 'API 키를 지웠어요'); if (v) loadModels(false); else render(); break; }
     case 'loadModels': loadModels(false); break;
+    case 'chatModelMenu': S.chatModelOpen = !S.chatModelOpen; if (S.chatModelOpen && S.set.apiKey && !S.models) loadModels(true); render(); break;
+    case 'sumModel': case 'chatModel': {
+      const key = act === 'sumModel' ? 'model' : 'chatModel';
+      const m = tierModel(d.k) || '';
+      N.setSetting(key, m); S.set[key] = m; if (act === 'chatModel') S.chatModelOpen = false;
+      toast(d.k === 'neon' && act === 'sumModel' ? '최고(Neon)는 통화 요약 비용이 많이 들어요. 지출 한도를 확인해 주세요.' : `${act === 'sumModel' ? '통화 요약' : '비서'}: ${tierLabel(m)}`);
+      render(); break;
+    }
     case 'url': N.openUrl(d.u); break;
     case 'taskOn': N.tasksConnect(); break;
     case 'taskOff': N.tasksDisconnect(); break;
@@ -1184,7 +1232,7 @@ async function loadModels(silent){
   const r = await nreq('aiModels');
   if (r.status === 200){ S.models = JSON.parse(r.body); if (!silent) toast(`API 키가 잘 돼요. 모델 ${S.models.length}개를 찾았어요`); }
   else if (!silent) toast(r.status === -1 ? '인터넷 연결을 확인하세요.' : (r.body || 'API 키를 확인해 주세요.'));
-  if (S.tab === 'set') render();
+  if (S.tab === 'set' || S.tab === 'chat') render();
 }
 document.addEventListener('keydown', e => {
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role=button]')){ e.preventDefault(); e.target.click(); }
